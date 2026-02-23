@@ -3,7 +3,7 @@ import google.generativeai as genai
 from datetime import datetime
 
 st.set_page_config(page_title="IA News Bolivia", page_icon="🇧🇴")
-st.title("🤖 RESUMEN INTELIGENTE: BOLIVIA")
+st.title("📰 RESUMEN DE NOTICIAS EN TIEMPO REAL")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
@@ -11,35 +11,42 @@ if api_key:
     try:
         genai.configure(api_key=api_key)
         
-        # BUSQUEDA AUTOMÁTICA DE MODELO DISPONIBLE
+        # Auto-detección del modelo disponible
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # Seleccionamos el primero que sea flash o pro
         model_name = next((m for m in available_models if "flash" in m), available_models[0])
-        
         model = genai.GenerativeModel(model_name)
 
-        if st.button('🚀 GENERAR RESUMEN AHORA'):
-            with st.spinner(f'Usando modelo {model_name}...'):
-                fecha_hoy = datetime.now().strftime('%d/%m/%Y')
+        if st.button('🚀 BUSCAR NOTICIAS DE HOY'):
+            with st.spinner('Accediendo a portales de noticias bolivianos...'):
+                # Usamos una instrucción que fuerce la búsqueda externa
+                prompt = """
+                URGENTE: Realiza una búsqueda en internet en tiempo real. 
+                Necesito las noticias reales de HOY, verificando la fecha real.
                 
-                prompt = f"""
-                Hoy es {fecha_hoy}. Busca noticias reales de hoy en Bolivia.
-                Medios: Opinión Cochabamba, Los Tiempos, La Voz de Tarija y TV (Unitel, Red Uno).
-                Temas: Economía, Impuestos y Política.
+                Busca específicamente en:
+                1. Los Tiempos (lostiempos.com)
+                2. Opinión (opinion.com.bo)
+                3. La Voz de Tarija (lavozdetarija.com)
+                4. Redes sociales de canales de televisión en Bolivia.
+
+                Filtra noticias de: ECONOMÍA, IMPUESTOS y POLÍTICA en Cochabamba y Bolivia.
                 
-                Entrega 6 noticias con este formato:
-                **TITULAR: [MAYÚSCULAS Y NEGRITA]**
-                **MEDIO: [MAYÚSCULAS Y NEGRITA]**
-                Resumen: [3 a 4 líneas]
-                Enlace: https://directausa.com/
+                Presenta entre 5 y 7 noticias con este formato:
+                
+                **TITULAR: [TITULAR REAL EN MAYÚSCULAS Y NEGRITA]**
+                **MEDIO: [NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
+                Resumen: [Escribe 3 a 4 líneas de lo que está pasando realmente hoy]
+                Enlace: [Detalla el enlace completo de la noticia, no solo el dominio] 
+                
+                No digas que no puedes acceder al futuro. Usa tu función de búsqueda web integrada para ver los portales de hoy.
                 """
                 
                 response = model.generate_content(prompt)
-                st.success("¡Resumen generado!")
+                st.success("Información actualizada")
                 st.markdown(response.text)
 
     except Exception as e:
-        st.error("Error de conexión con Google AI")
+        st.error("Error al obtener noticias")
         st.info(f"Detalle: {e}")
 else:
-    st.warning("👈 Ingresa tu API Key.")
+    st.warning("👈 Ingresa tu API Key en la barra lateral.")
