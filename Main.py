@@ -29,6 +29,7 @@ def extraer_cochabamba():
     fuentes = [
         {"nombre": "Opinión Cochabamba", "url": "https://www.opinion.com.bo", "base": "https://www.opinion.com.bo"},
         {"nombre": "Los Tiempos Economía", "url": "https://www.lostiempos.com", "base": "https://www.lostiempos.com"}
+        {"nombre": "La Voz de Tarija", "url": "https://www.lavozdetarija.com", "base": "https://www.lavozdetarija.com"}
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     data_acumulada = ""
@@ -50,7 +51,7 @@ def extraer_cochabamba():
     return data_acumulada
 
 if api_key:
-    if st.button('🚀 GENERAR REPORTE COCHABAMBA'):
+    if st.button('🚀 GENERAR MONITOREO COCHABAMBA'):
         with st.spinner('Analizando prensa de Cochabamba...'):
             modelo = detectar_modelo(api_key)
             noticias_cba = extraer_cochabamba()
@@ -62,21 +63,22 @@ if api_key:
                 {noticias_cba}
                 
                 INSTRUCCIÓN:
-                Genera 6 bloques de noticias centrados exclusivamente en COCHABAMBA y BOLIVIA.
+                Genera 6 bloques de noticias CENTRADOS PRINCIPALMENTE en COCHABAMBA Y LUEGO EN TARIJA, BOLIVIA.
                 Temas: Economía, Impuestos y Política.
                 
                 IMPORTANTE: 
                 - Copia el enlace (URL) exactamente como aparece en los datos.
                 - No inventes enlaces.
+                - Copia el enlace de la noticia exactamente como es. 
                 
                 FORMATO:
-                **[TITULAR: TEXTO EN MAYÚSCULAS]**
-                SIGUIENTE LÍNEA
-                **[NOMBRE DE MEDIO EN MAYÚSCULAS]**
-                SIGUIENTE LÍNEA
-                [RESUMEN EN 3 líneas]
-                SIGUIENTE LÍNEA
-                [ENLACE URL]
+                **[TITULAR EN TEXTO EN MAYÚSCULAS Y NEGRITAS]**
+                SALTO DE LÍNEA
+                **[NOMBRE DE MEDIO EN TEXTO EN MAYÚSCULAS Y NEGRITAS]**
+                SALTO DE LÍNEA
+                [TEXTO RESUMEN EN 3 A 5 líneas]
+                SALTO DE LÍNEA
+                [ENLACE URL EXACTO]
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
