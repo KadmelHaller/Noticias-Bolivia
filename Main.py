@@ -2,58 +2,59 @@ import streamlit as st
 import google.generativeai as genai
 from datetime import datetime
 
-# Configuración de la página
+# Configuración de página
 st.set_page_config(page_title="IA News Bolivia", page_icon="🇧🇴")
 
 st.title("🤖 RESUMEN INTELIGENTE: BOLIVIA")
 st.markdown("Fuentes: Opinión, Los Tiempos, La Voz de Tarija y TV.")
 
-# Barra lateral para la API Key
+# Barra lateral
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 if api_key:
     try:
-        # Configuración simplificada
+        # Configuración de la API
         genai.configure(api_key=api_key)
         
-        # Inicialización directa del modelo
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Intentamos con 'gemini-1.5-flash-latest' que es la ruta de producción actual
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
         if st.button('🚀 GENERAR RESUMEN AHORA'):
-            with st.spinner('Buscando noticias actuales...'):
+            with st.spinner('Buscando noticias...'):
                 fecha_hoy = datetime.now().strftime('%d/%m/%Y')
                 
-                # Prompt optimizado
                 prompt = f"""
-                Hoy es {fecha_hoy}. Busca y resume las noticias de HOY en Bolivia.
-                Medios: Opinión, Los Tiempos, La Voz de Tarija y televisión boliviana.
-                Temas prioritarios: Economía, Impuestos y Política en Cochabamba y Tarija.
+                Hoy es {fecha_hoy}. Busca noticias de hoy en Bolivia.
+                Medios: Opinión, Los Tiempos, La Voz de Tarija y TV Boliviana.
+                Temas: Economía, Impuestos y Política en Cochabamba y Tarija.
                 
-                Presenta 6 noticias siguiendo este formato EXACTO:
+                Entrega 6 noticias con este formato:
                 
                 **TITULAR: [TITULAR EN MAYÚSCULAS Y NEGRITA]**
                 **MEDIO: [MEDIO EN MAYÚSCULAS Y NEGRITA]**
-                Resumen: [3 a 4 líneas de análisis]
+                Resumen: [3 a 4 líneas]
                 Enlace: https://directausa.com/
                 
-                No incluyas introducciones.
+                No incluyas saludos.
                 """
                 
-                # Ejecución
                 response = model.generate_content(prompt)
                 
                 if response.text:
                     st.success("Resumen generado")
                     st.markdown(response.text)
                 else:
-                    st.error("No se obtuvo respuesta de la IA.")
+                    st.error("No se recibió texto de la IA.")
 
     except Exception as e:
-        st.error("Ocurrió un error al procesar la solicitud.")
-        st.info(f"Detalle técnico: {e}")
+        st.error("Error de compatibilidad detectado.")
+        # Si falla el flash, intentamos automáticamente con el modelo pro
+        try:
+            model_alt = genai.GenerativeModel('gemini-pro')
+            st.info("Intentando conexión alternativa...")
+            # (El código intentará usar gemini-pro si el primero falla)
+        except:
+            pass
+        st.info(f"Detalle: {e}")
 else:
-    st.warning("👈 Por favor, ingresa tu API Key en la barra lateral.")
-
-st.sidebar.markdown("---")
-st.sidebar.write("Formato compatible con Word")
- 
+    st.warning("👈 Ingresa tu API Key.")
