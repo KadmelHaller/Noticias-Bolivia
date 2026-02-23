@@ -27,8 +27,8 @@ def detectar_modelo(key):
 def extraer_cochabamba():
     # Prioridad absoluta a Cochabamba
     fuentes = [
-        {"nombre": "Opinión Cochabamba", "url": "https://www.opinion.com.bo/section/cochabamba/", "base": "https://www.opinion.com.bo"},
-        {"nombre": "Los Tiempos Economía", "url": "https://www.lostiempos.com/actualidad/economia", "base": "https://www.lostiempos.com"}
+        {"nombre": "Opinión Cochabamba", "url": "https://www.opinion.com.bo", "base": "https://www.opinion.com.bo"},
+        {"nombre": "Los Tiempos Economía", "url": "https://www.lostiempos.com", "base": "https://www.lostiempos.com"}
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     data_acumulada = ""
@@ -70,10 +70,13 @@ if api_key:
                 - No inventes enlaces.
                 
                 FORMATO:
-                **TITULAR: [TEXTO]**
-                **MEDIO: [NOMBRE]**
-                Resumen: [3 líneas]
-                Enlace: [URL]
+                **[TITULAR: TEXTO EN MAYÚSCULAS]**
+                SIGUIENTE LÍNEA
+                **[NOMBRE DE MEDIO EN MAYÚSCULAS]**
+                SIGUIENTE LÍNEA
+                [RESUMEN EN 3 líneas]
+                SIGUIENTE LÍNEA
+                [ENLACE URL]
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
