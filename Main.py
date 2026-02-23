@@ -63,15 +63,15 @@ if api_key:
                 Hoy es {fecha_hoy}. Actúa como editor. Datos: {noticias_raw}
                 
                 Instrucciones Críticas de Formato:
-                1. Entrega 6 noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional).
+                1. Entrega noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional).
                 2. NO uses las etiquetas "Titular", "Medio", "Resumen" o "Enlace". Prohibido poner etiquetas.
                 3. Cada bloque de noticia debe tener exactamente 4 datos directos sin etiqueta:
-                   Línea 1: EL TITULAR EN MAYÚSCULAS Y NEGRITA.
-                   Línea 2: EL NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA.
-                   Línea 3: resumen de 3 a 4 líneas, párrafo normal.
+                   Línea 1: EL TITULAR EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
+                   Línea 2: EL NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
+                   Línea 3: resumen de 3 a 4 líneas, párrafo normal y luego un salto de línea.
                    Línea 4: url completa en minúsculas.
-                4. Separa cada una de las 4 líneas con un salto de línea simple.
-                5. Deja un espacio en blanco entre cada bloque de noticia.
+                4. Separa cada una de las 4 líneas con un salto de línea simple de forma tal que no se confunda la información.
+                5. Deja dos saltos de línea entre cada bloque de noticia.
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
