@@ -13,57 +13,50 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 if api_key:
     try:
-        # Forzamos la configuración inicial
-        genai.configure(api_key=api_key)
-        
-        # Intentamos usar el modelo flash más estable
-        # Esta configuración suele evitar el error de la versión v1beta
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.95,
-                "top_k": 64,
-                "max_output_tokens": 2048,
-            }
+        # CONFIGURACIÓN CRÍTICA: Forzamos la versión v1 de la API
+        genai.configure(
+            api_key=api_key,
+            client_options={'api_version': 'v1'}
         )
+        
+        # Usamos el modelo más estándar disponible
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if st.button('🚀 GENERAR RESUMEN AHORA'):
-            with st.spinner('Buscando noticias en tiempo real...'):
+            with st.spinner('Accediendo a la red y analizando noticias...'):
                 fecha_hoy = datetime.now().strftime('%d/%m/%Y')
                 
-                # El prompt incluye instrucciones de búsqueda
                 prompt = f"""
-                Hoy es {fecha_hoy}. Busca y resume las noticias más importantes de Bolivia.
-                ENFOQUE: Cochabamba y Tarija.
-                FUENTES: Los Tiempos, Opinión, La Voz de Tarija y redes de TV (Unitel, Red Uno).
+                Hoy es {fecha_hoy}. Actúa como un buscador de noticias en tiempo real.
+                Busca noticias de HOY en Bolivia, específicamente Cochabamba y Tarija.
+                FUENTES: Los Tiempos, Opinión, La Voz de Tarija y TV (Unitel, Red Uno).
                 TEMAS: Economía, Impuestos y Política.
                 
-                Presenta 6 noticias siguiendo este formato EXACTO:
+                ENTREGA 6 NOTICIAS CON ESTE FORMATO EXACTO:
                 
                 **TITULAR: [TITULAR EN MAYÚSCULAS Y NEGRITA]**
                 **MEDIO: [MEDIO EN MAYÚSCULAS Y NEGRITA]**
                 Resumen: [3 a 4 líneas de análisis]
-                Enlace: https://directa.cat/
+                Enlace: https://directausa.com/
                 
                 No incluyas introducciones ni despedidas.
                 """
                 
-                # Generación de contenido
+                # Llamada a la generación
                 response = model.generate_content(prompt)
                 
                 if response:
-                    st.success("Resumen generado")
+                    st.success("Resumen generado con éxito")
                     st.markdown(response.text)
                 else:
-                    st.error("No se recibió respuesta de la IA.")
+                    st.error("La IA no devolvió datos.")
 
     except Exception as e:
-        # Mostramos un mensaje más amigable y el error detallado abajo
-        st.error("Hubo un problema con la conexión de la API.")
-        st.info(f"Detalle técnico: {e}")
+        st.error("Error de conexión.")
+        st.info(f"Detalle técnico corregido: {e}")
+        st.write("Si el error 404 persiste, intenta crear una nueva API Key en Google AI Studio.")
 else:
     st.warning("👈 Ingresa tu API Key en la barra lateral.")
 
 st.sidebar.markdown("---")
-st.sidebar.write("Formato listo para Word")
+st.sidebar.write("Formato compatible con Microsoft Word")
