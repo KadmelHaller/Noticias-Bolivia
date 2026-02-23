@@ -5,8 +5,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 
-# Configuración de página
-st.set_page_config(page_title="Reporte Bolivia Multi-Medio", page_icon="🇧🇴")
+st.set_page_config(page_title="Reporte Bolivia Profesional", page_icon="🇧🇴")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
@@ -42,7 +41,6 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            # Buscamos titulares en etiquetas h1, h2, h3
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=8):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
@@ -54,36 +52,34 @@ def extraer_noticias():
     return data_acumulada
 
 if api_key:
-    if st.button('🚀 GENERAR REPORTE COMPLETO'):
-        with st.spinner('Analizando prensa y medios audiovisuales...'):
+    if st.button('🚀 GENERAR REPORTE LIMPIO'):
+        with st.spinner('Analizando medios...'):
             modelo = detectar_modelo(api_key)
             noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
+                # Prompt con instrucciones de formato negativas (prohibiciones)
                 prompt = f"""
-                Hoy es {fecha_hoy}. Actúa como un editor de prensa boliviano.
-                Usa exclusivamente estos datos: {noticias_raw}
+                Hoy es {fecha_hoy}. Actúa como editor. Datos: {noticias_raw}
                 
-                TAREA: Genera 6 noticias sobre Economía, Impuestos y Política.
-                PRIORIDAD: 1. Cochabamba, 2. Tarija, 3. Nacional.
-
-                FORMATO ESTRICTO (Sigue esto sin añadir nada más):
-                **TITULAR EN MAYÚSCULAS Y NEGRITA**
-                **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                resumen detallado en minúsculas de 3 a 4 líneas.
-                url completa en minúsculas
-                
-                (IMPORTANTE: Un salto de línea entre cada dato del bloque y un espacio entre noticias distintas. No uses la palabra "Resumen" ni "Enlace").
+                Instrucciones Críticas de Formato:
+                1. Entrega 6 noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional).
+                2. NO uses las etiquetas "Titular", "Medio", "Resumen" o "Enlace". Prohibido poner etiquetas.
+                3. Cada bloque de noticia debe tener exactamente 4 datos directos sin etiqueta:
+                   Línea 1: EL TITULAR EN MAYÚSCULAS Y NEGRITA.
+                   Línea 2: EL NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA.
+                   Línea 3: resumen de 3 a 4 líneas, párrafo normal.
+                   Línea 4: url completa en minúsculas.
+                4. Separa cada una de las 4 líneas con un salto de línea simple.
+                5. Deja un espacio en blanco entre cada bloque de noticia.
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
                 res = requests.post(url_api, json={"contents": [{"parts": [{"text": prompt}]}]})
                 
                 if res.status_code == 200:
+                    # Usamos st.text para que no interprete Markdown extraño y respete saltos
                     st.markdown(res.json()['candidates'][0]['content']['parts'][0]['text'])
                 else:
-                    st.error("Error en el procesamiento de la IA.")
-            else:
-                st.error("No se pudo obtener información suficiente. Intenta nuevamente en unos segundos.")
-else:
-    st.warning("👈 Ingresa tu API Key en la barra lateral.")
+                    st.error("Error en el procesamiento.")
+ 
