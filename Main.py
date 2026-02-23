@@ -1,77 +1,71 @@
 import streamlit as st
 import google.generativeai as genai
 from datetime import datetime
-import pytz # Librería para asegurar la hora exacta de Bolivia
+import pytz
 
 # 1. Configuración de la página
 st.set_page_config(page_title="IA News Bolivia Pro", page_icon="🇧🇴")
 
-# 2. Obtener fecha actual de Bolivia automáticamente
+# 2. Fecha automática
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_actual = datetime.now(zona_horaria)
-fecha_texto = fecha_actual.strftime('%A %d de %B de %Y') # Ej: Lunes 23 de Febrero de 2026
+fecha_texto = fecha_actual.strftime('%d/%m/%Y')
 
-st.title("📰 RESUMEN DE NOTICIAS BOLIVIA")
-st.caption(f"Hoy es: {fecha_texto}")
+st.title("📰 REPORTE DIARIO DE NOTICIAS")
+st.caption(f"Fecha de consulta: {fecha_texto}")
 
-# 3. Barra lateral para API Key
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 if api_key:
     try:
         genai.configure(api_key=api_key)
         
-        # Selección automática del mejor modelo disponible
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        model_id = next((m for m in models if "flash" in m), models[0])
-        
-        # INSTRUCCIÓN DINÁMICA: La IA se actualiza cada vez que presionas el botón
+        # Usamos la herramienta de búsqueda de Google (Google Search Retrieval)
+        # Esto es lo que permite que la IA "navegue" de verdad
         model = genai.GenerativeModel(
-            model_name=model_id,
-            system_instruction=f"Eres un analista de noticias en tiempo real. HOY ES {fecha_texto}. Tu misión es informar objetivamente sobre Bolivia."
+            model_name='gemini-1.5-flash',
+            tools=[{"google_search_retrieval": {}}] 
         )
 
-        if st.button('🚀 GENERAR RESUMEN DEL DÍA'):
-            with st.spinner(f'Buscando noticias reales del {fecha_texto}...'):
+        if st.button('🚀 GENERAR RESUMEN REAL AHORA'):
+            with st.spinner('Navegando en Los Tiempos, Opinión y La Voz de Tarija...'):
                 
-                # Prompt que obliga a buscar en los portales específicos con la fecha actual
+                # Prompt agresivo: Prohibimos excusas y obligamos a buscar
                 prompt = f"""
-                Realiza una búsqueda web exhaustiva para encontrar noticias publicadas HOY {fecha_texto}.
+                FECHA ACTUAL: {fecha_texto}.
+                TAREA: Usa la herramienta de búsqueda de Google para encontrar noticias REALES publicadas HOY {fecha_texto} en Bolivia.
                 
-                FUENTES REQUERIDAS:
-                - Periódico Los Tiempos (Cochabamba)
-                - Periódico Opinión (Cochabamba)
-                - Periódico La Voz de Tarija (Tarija) 
-                - Noticieros de TV: Unitel y Red Uno
+                FUENTES ESPECÍFICAS: 
+                - Portales web de Los Tiempos y Opinión (Cochabamba).
+                - Portal web de La Voz de Tarija.
+                - Web de Unitel y Red Uno.
                 
-                TEMAS ESPECÍFICOS: Economía, Impuestos y Política.
+                TEMAS: Economía, Impuestos y Política.
                 
-                PRESENTA 5 a 7 NOTICIAS CON ESTE FORMATO (PARA COPIAR A WORD):
-                
-                **[TITULAR EN MAYÚSCULAS Y NEGRITA]**
-                Siguiente línea:
-                **[NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
-                Siguiente linea:
-                Resumen: [Redacta un resumen analítico de 4 a 5 líneas]
-                Siguiente línea:
-                Enlace real completo de la noticia
-                
-                Importante: No inventes datos. Si una noticia es de ayer pero sigue siendo tendencia hoy, puedes incluirla aclarando la fecha. No menciones años pasados como el presente.
+                REGLAS CRÍTICAS:
+                1. NO des explicaciones sobre tus límites de fecha o entrenamiento.
+                2. NO inventes noticias ni generes simulaciones.
+                3. Si la búsqueda no arroja resultados de hoy, busca noticias de las últimas 24 horas.
+                4. Entrega exactamente 6 noticias con este formato:
+
+                **TITULAR: [TITULAR REAL EN MAYÚSCULAS Y NEGRITA]**
+                **MEDIO: [NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
+                Resumen: [3 a 4 líneas de análisis real]
+                Enlace: https://www.realtrue.org/espanol/
+
+                Si entiendes, comienza directamente con las noticias.
                 """
                 
                 response = model.generate_content(prompt)
                 
-                st.success(f"Resultados para el {fecha_texto}")
-                st.markdown(response.text)
-                
-                # Opción para copiar rápido
-                st.button("Re-generar si los enlaces no cargan")
+                if response.text:
+                    st.success(f"Noticias encontradas para hoy {fecha_texto}")
+                    st.markdown(response.text)
+                else:
+                    st.warning("La búsqueda no devolvió resultados específicos. Intenta presionar el botón nuevamente.")
 
     except Exception as e:
-        st.error("Error en la conexión inteligente")
+        st.error("Error en la búsqueda en vivo.")
         st.info(f"Detalle: {e}")
 else:
-    st.warning("👈 Ingresa tu API Key para activar la búsqueda.")
-
-st.sidebar.markdown("---")
-st.sidebar.write("App Automatizada 2026")
+    st.warning("👈 Ingresa tu API Key para activar la búsqueda web.")
