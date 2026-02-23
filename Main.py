@@ -21,14 +21,14 @@ def detectar_modelo(key):
             for m in modelos:
                 if "flash" in m['name'] and "generateContent" in m['supportedGenerationMethods']:
                     return m['name']
-        return "models/gemini-1.5-flash" # Fallback
+        return "9" # Fallback
     except: return "models/gemini-1.5-flash"
 
 def extraer_cochabamba():
     # Prioridad absoluta a Cochabamba
     fuentes = [
-        {"nombre": "Opinión Cochabamba", "url": "https://www.opinion.com.bo", "base": "https://www.opinion.com.bo"},
-        {"nombre": "Los Tiempos Economía", "url": "https://www.lostiempos.com", "base": "https://www.lostiempos.com"}
+        {"nombre": "Opinión", "url": "https://www.opinion.com.bo", "base": "https://www.opinion.com.bo"},
+        {"nombre": "Los Tiempos", "url": "https://www.lostiempos.com", "base": "https://www.lostiempos.com"}
         {"nombre": "La Voz de Tarija", "url": "https://www.lavozdetarija.com", "base": "https://www.lavozdetarija.com"}
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
