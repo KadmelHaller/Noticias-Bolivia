@@ -20,7 +20,7 @@ if api_key:
             with st.spinner('Accediendo a portales de noticias bolivianos...'):
                 # Usamos una instrucción que fuerce la búsqueda externa
                 prompt = """
-                URGENTE: Realiza una búsqueda en internet en tiempo real. 
+                Realiza una búsqueda en internet en tiempo real. 
                 Necesito las noticias reales de HOY, verificando la fecha real.
                 
                 Busca específicamente en:
@@ -29,14 +29,16 @@ if api_key:
                 3. La Voz de Tarija (lavozdetarija.com)
                 4. Redes sociales de canales de televisión en Bolivia.
 
-                Filtra noticias de: ECONOMÍA, IMPUESTOS y POLÍTICA en Cochabamba y Bolivia.
+                Filtra noticias de: ECONOMÍA, IMPUESTOS y POLÍTICA en Cochabamba, Bolivia.
                 
                 Presenta entre 5 y 7 noticias con este formato:
                 
                 **TITULAR: [TITULAR REAL EN MAYÚSCULAS Y NEGRITA]**
+                Espacio
                 **MEDIO: [NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
+                Espacio
                 Resumen: [Escribe 3 a 4 líneas de lo que está pasando realmente hoy]
-                Enlace: [Detalla el enlace completo de la noticia, no solo el dominio] 
+                Enlace: [Detalla el enlace completo y real de la noticia, no solo el dominio] 
                 
                 No digas que no puedes acceder al futuro. Usa tu función de búsqueda web integrada para ver los portales de hoy.
                 """
