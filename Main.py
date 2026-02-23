@@ -17,7 +17,7 @@ if api_key:
         genai.configure(api_key=api_key)
         
         # Usamos 'gemini-1.5-flash-latest' que es la versión más estable para streaming y generación
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-pro')
 
         if st.button('🚀 GENERAR RESUMEN AHORA'):
             with st.spinner('Buscando noticias en tiempo real...'):
