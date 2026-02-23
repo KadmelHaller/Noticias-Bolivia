@@ -33,14 +33,14 @@ if api_key:
                 
                 Presenta entre 5 y 7 noticias con este formato:
                 
-                **TITULAR: [TITULAR REAL EN MAYÚSCULAS Y NEGRITA]**
+                **[TITULAR EXACTO Y REAL EN MAYÚSCULAS Y NEGRITA]**
                 Espacio
-                **MEDIO: [NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
+                **[NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA]**
                 Espacio
                 Resumen: [Escribe 3 a 4 líneas de lo que está pasando realmente hoy]
                 Enlace: [Detalla el enlace completo y real de la noticia, no solo el dominio] 
                 
-                No digas que no puedes acceder al futuro. Usa tu función de búsqueda web integrada para ver los portales de hoy.
+                No digas que no puedes acceder al futuro pero tampoco uses noticias de otras fechas, solamente de hoy. Usa tu función de búsqueda web integrada para ver los portales de hoy.
                 """
                 
                 response = model.generate_content(prompt)
