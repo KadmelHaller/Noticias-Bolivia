@@ -52,7 +52,7 @@ def extraer_noticias():
     return data_acumulada
 
 if api_key:
-    if st.button('🚀 GENERAR REPORTE LIMPIO'):
+    if st.button('🚀 GENERAR MONITOREO'):
         with st.spinner('Analizando medios...'):
             modelo = detectar_modelo(api_key)
             noticias_raw = extraer_noticias()
@@ -63,9 +63,9 @@ if api_key:
                 Hoy es {fecha_hoy}. Actúa como editor. Datos: {noticias_raw}
                 
                 Instrucciones Críticas de Formato:
-                1. Entrega noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional).
+                1. Entrega noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional, solamente noticias sobre economía, impuestos y gobierno).
                 2. NO uses las etiquetas "Titular", "Medio", "Resumen" o "Enlace". Prohibido poner etiquetas.
-                3. Cada bloque de noticia debe tener exactamente 4 datos directos sin etiqueta:
+                3. Cada bloque de noticia debe tener exactamente 4 datos directos sin etiqueta separados por saltos de línea simples:
                    Línea 1: EL TITULAR EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
                    Línea 2: EL NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
                    Línea 3: resumen de 3 a 4 líneas, párrafo normal y luego un salto de línea.
