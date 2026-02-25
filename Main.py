@@ -78,7 +78,7 @@ if api_key:
                 - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
                 FORMATO DE RESPUESTA (PÁRRAFOS DIRECTOS):
-                **TITULAR EN MAYÚSCULAS Y NEGRITAS Y SÍMBOLO * AL PRINCIPIO Y AL FINAL DE CADA TITUAL**
+                **TITULAR EN MAYÚSCULAS, NEGRITAS Y EL SÍMBOLO * AL PRINCIPIO Y AL FINAL DE CADA TITULAR**
                 Salto de línea sencillo
                 **MEDIO EN MAYÚSCULAS Y NEGRITAS**
                 Salto de línea sencillo
