@@ -7,7 +7,6 @@ import pytz
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 zona_horaria = pytz.timezone('America/La_Paz')
-# Obtenemos la fecha dinámicamente para que el prompt siempre esté actualizado
 ahora = datetime.now(zona_horaria)
 fecha_hoy_str = ahora.strftime('%A %d de %B de %Y') 
 
@@ -41,17 +40,17 @@ def extraer_noticias():
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     data_acumulada = ""
 
     for fuente in fuentes:
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            r = requests.get(fuente['url'], headers=headers, timeout=15)
             soup = BeautifulSoup(r.text, 'html.parser')
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=15):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
-                if a_tag and a_tag.get('href') and len(titulo) > 25:
+                if a_tag and a_tag.get('href') and len(titulo) > 28:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     data_acumulada += f"Fuente: {fuente['nombre']} | Noticia: {titulo} | URL: {full_link}\n"
@@ -65,41 +64,26 @@ if api_key:
             noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
-                # Prompt reforzado con reglas de exclusión
                 prompt = f"""
-                Hoy es {fecha_hoy_str}. 
-                Eres un analista de medios experto en Bolivia. 
+                Hoy es {fecha_hoy_str}. Actúa como analista de prensa.
                 
                 DATOS EXTRAÍDOS:
                 {noticias_raw}
                 
-                REGLAS DE FILTRADO (MUY IMPORTANTES):
-                1. SOLO noticias publicadas HOY {fecha_hoy_str}. 
-                2. ELIMINA cualquier noticia que mencione fechas pasadas, eventos de hace días o que el contexto indique que no es de hoy.
-                3. PRIORIZA: Economía, Impuestos y Gobierno.
-                4. UBICACIÓN: Máxima prioridad a COCHABAMBA y TARIJA.
+                REGLAS DE FILTRADO:
+                1. SOLO noticias de HOY {fecha_hoy_str}. Descarta el resto.
+                2. Prioridad: Economía, Impuestos y Gobierno.
+                3. Prioridad Geográfica: Cochabamba y Tarija.
 
-                ORDEN DE PRIORIDAD DE MEDIOS (Presenta en este orden exacto):
-                1. OPINIÓN
-                2. LOS TIEMPOS
-                3. LA VOZ DE TARIJA
-                4. TELEVISIÓN (BOLIVIA TV, UNITEL, RED UNO, ATB, BOLIVISIÓN, CADENA A)
-                5. DIGITALES (URGENTE BO, IN NOTICIAS, ENFOQUE NEWS)
+                ORDEN: Opinión, Los Tiempos, La Voz de Tarija, TV, Digitales.
 
-                FORMATO DE SALIDA (ESTRICTO):
+                FORMATO:
                 **TITULAR EN MAYÚSCULAS Y NEGRITA**
-                
                 **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                
-                resumen de 4 a 6 líneas en minúsculas, explicando el suceso actual de forma profesional.
-                
-                url completa en minúsculas.
+                Resumen de 4 a 6 líneas en minúsculas. Detalla nombres y cargos.
+                URL completa en minúsculas.
 
-                INSTRUCCIONES FINALES:
-                - Usa dos saltos de línea entre cada bloque.
-                - NO pongas etiquetas como "Resumen:" o "URL:".
-                - No inventes noticias. Si no hay noticias de hoy en un medio, pasa al siguiente.
-                - Detalla nombres y cargos de las personas de cada nota, verificando la veracidad de estos datos.
+                (Dos saltos de línea entre bloques. Sin etiquetas "Resumen:" o "URL:")
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
@@ -108,20 +92,27 @@ if api_key:
                     "safetySettings": [
                         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                     ],
                     "generationConfig": {
-                        "temperature": 0.0, # Mínima creatividad para máxima precisión histórica
-                        "topP": 1,
-                        "maxOutputTokens": 2048
+                        "temperature": 0.1,
+                        "maxOutputTokens": 2500
                     }
                 }
                 
                 res = requests.post(url_api, json=payload)
+                
                 if res.status_code == 200:
-                    respuesta_texto = res.json()['candidates'][0]['content']['parts'][0]['text']
-                    st.markdown(respuesta_texto)
+                    data = res.json()
+                    # Verificación de si la respuesta fue bloqueada por filtros
+                    if 'candidates' in data and data['candidates'][0].get('content'):
+                        texto = data['candidates'][0]['content']['parts'][0]['text']
+                        st.markdown(texto)
+                    else:
+                        st.error("La IA bloqueó el contenido por seguridad. Reintentando con menos restricciones...")
+                        st.write(f"Motivo del cierre: {data['candidates'][0].get('finishReason')}")
                 else:
-                    st.error("Error al procesar con la IA.")
+                    st.error(f"Error {res.status_code}: {res.text}")
             else:
-                st.error("No se pudo obtener información suficiente de los portales.")
+                st.error("No se capturó suficiente información de las portadas.")
