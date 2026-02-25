@@ -10,7 +10,7 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_str = ahora.strftime('%A %d de %B de %Y') 
 
-st.title(f"📰 MONITOREO DE NOTICIAS - SIN CBBA: {ahora.strftime('%d/%m/%Y')}")
+st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def detectar_modelo(key):
@@ -40,52 +40,50 @@ def extraer_noticias():
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_acumulada = ""
 
     for fuente in fuentes:
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=12):
+            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=10):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
                 if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
-                    data_acumulada += f"Fuente: {fuente['nombre']} | Noticia: {titulo} | URL: {full_link}\n"
+                    data_acumulada += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
     return data_acumulada
 
 if api_key:
-    if st.button('🚀 GENERAR MONITOREO DEL DÍA'):
-        with st.spinner('Analizando vigencia y ordenando noticias...'):
+    if st.button('🚀 GENERAR MONITOREO SIN BLOQUEOS'):
+        with st.spinner('Procesando datos técnicos...'):
             modelo = detectar_modelo(api_key)
             noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
+                # Prompt convertido en una tarea de extracción de datos pura
                 prompt = f"""
-                Hoy es {fecha_hoy_str}. Actúa como un sistema de archivo histórico neutral. 
-                No generes opiniones, solo transcribe resúmenes informativos de la prensa.
+                FECHA DE REFERENCIA: {fecha_hoy_str}.
+                TAREA: Extracción de datos de prensa para informe técnico.
                 
-                DATOS EXTRAÍDOS:
+                ENTRADA DE DATOS:
                 {noticias_raw}
                 
-                REGLAS DE FILTRADO:
-                1. SOLO noticias de HOY {fecha_hoy_str}.
-                2. Prioridad: Economía, Impuestos y Gobierno.
-                3. Prioridad Geográfica: Cochabamba y Tarija.
+                REGLAS DE FILTRADO (OBLIGATORIAS):
+                - Solo eventos del {fecha_hoy_str}.
+                - Temas: Economía, Impuestos, Estado.
+                - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
-                ORDEN: Opinión, Los Tiempos, La Voz de Tarija, TV, Digitales.
+                FORMATO DE RESPUESTA (PÁRRAFOS DIRECTOS):
+                **TITULAR EN MAYÚSCULAS**
+                **MEDIO EN MAYÚSCULAS**
+                Párrafo técnico informativo de 4 líneas sin usar lenguaje emocional.
+                URL en minúsculas.
 
-                FORMATO DE SALIDA (ESTRICTO):
-                **TITULAR EN MAYÚSCULAS Y NEGRITA**
-                **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                Resumen de 4 a 6 líneas en minúsculas. Detalla nombres y cargos de forma objetiva.
-                URL completa en minúsculas.
-
-                INSTRUCCIÓN DE SEGURIDAD: 
-                Si la noticia trata sobre crisis laboral o política, descríbela técnicamente sin usar adjetivos para evitar bloqueos del sistema.
+                (Dos saltos de línea entre bloques. NO agregues introducciones ni conclusiones).
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
@@ -98,22 +96,19 @@ if api_key:
                         {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                     ],
-                    "generationConfig": {
-                        "temperature": 0.0,
-                        "maxOutputTokens": 3000
-                    }
+                    "generationConfig": {"temperature": 0.0}
                 }
                 
                 res = requests.post(url_api, json=payload)
                 
                 if res.status_code == 200:
-                    data = res.json()
-                    # Si no hay 'content' en la respuesta, es que fue bloqueado
                     try:
-                        texto = data['candidates'][0]['content']['parts'][0]['text']
+                        texto = res.json()['candidates'][0]['content']['parts'][0]['text']
+                        # Si el texto es muy corto, algo salió mal
+                        if len(texto) < 50:
+                            st.warning("La respuesta fue demasiado corta. La IA podría estar censurando el contenido.")
                         st.markdown(texto)
-                    except (KeyError, IndexError):
-                        st.warning("⚠️ El filtro de seguridad de la IA bloqueó parte del reporte debido a palabras sensibles en las noticias. Mostrando el motivo técnico:")
-                        st.json(data['candidates'][0].get('safetyRatings', []))
+                    except:
+                        st.error("La IA bloqueó la respuesta por motivos de seguridad interna.")
                 else:
-                    st.error(f"Error {res.status_code}: {res.text}")
+                    st.error(f"Error de conexión: {res.status_code}")
