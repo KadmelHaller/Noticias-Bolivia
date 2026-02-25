@@ -9,7 +9,7 @@ st.set_page_config(page_title="Reporte Bolivia Profesional", page_icon="🇧🇴
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-st.title(f"📰 REPORTE DE NOTICIAS: {fecha_hoy}")
+st.title(f"📰 MONITOREO DE NOTICIAS - SIN CBBA: {fecha_hoy}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def detectar_modelo(key):
@@ -26,13 +26,19 @@ def detectar_modelo(key):
 
 def extraer_noticias():
     fuentes = [
-        {"nombre": "OPINIÓN COCHABAMBA", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
+        {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/", "base": "https://www.lostiempos.com"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/", "base": "https://lavozdetarija.com"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/economia/", "base": "https://unitel.bo"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/", "base": "https://www.reduno.com.bo"},
-        {"nombre": "ATB DIGITAL", "url": "https://www.atb.com.bo/", "base": "https://www.atb.com.bo"},
+        {"nombre": "ATB", "url": "https://www.atb.com.bo/", "base": "https://www.atb.com.bo"},
         {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/principal/noticias", "base": "https://www.boliviatv.bo"}
+        {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/", "base": "https://www.urgente.bo/"}
+        {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/", "base": "https://www.redbolivision.tv.bo/"}
+        {"nombre": "CADENA A", "url": "https://www.cadenaa.tv/", "base": "https://www.cadenaa.tv/"}
+        {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com/"}
+        {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo/"}
+
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_acumulada = ""
@@ -72,6 +78,7 @@ if api_key:
                    Línea 4: url completa en minúsculas.
                 4. Separa cada una de las 4 líneas con un salto de línea simple de forma tal que no se confunda la información.
                 5. Deja dos saltos de línea entre cada bloque de noticia.
+                6. Verifica cada nombre y cargo mencionado en las noticias para que el resumen tenga datos correctos.
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
