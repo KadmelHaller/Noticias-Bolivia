@@ -78,9 +78,12 @@ if api_key:
                 - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
                 FORMATO DE RESPUESTA (PÁRRAFOS DIRECTOS):
-                **TITULAR EN MAYÚSCULAS**
-                **MEDIO EN MAYÚSCULAS**
-                Párrafo técnico informativo de 4 líneas sin usar lenguaje emocional.
+                **TITULAR EN MAYÚSCULAS Y NEGRITAS Y SÍMBOLO * AL PRINCIPIO Y AL FINAL DE CADA TITUAL**
+                Salto de línea sencillo
+                **MEDIO EN MAYÚSCULAS Y NEGRITAS**
+                Salto de línea sencillo
+                Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional.
+                Salto de línea sencillo
                 URL en minúsculas.
 
                 (Dos saltos de línea entre bloques. NO agregues introducciones ni conclusiones).
