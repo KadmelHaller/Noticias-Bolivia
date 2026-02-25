@@ -43,7 +43,12 @@ def extraer_noticias():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_acumulada = ""
 
+    # Espacio para mostrar el progreso en la UI
+    status_text = st.empty()
+    
     for fuente in fuentes:
+        # Actualiza el mensaje en la pantalla
+        status_text.text(f"🔍 Consultando: {fuente['nombre']}...")
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
@@ -55,16 +60,19 @@ def extraer_noticias():
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     data_acumulada += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
+    
+    # Limpia el texto de estado al terminar
+    status_text.empty()
     return data_acumulada
 
 if api_key:
     if st.button('🚀 GENERAR MONITOREO SIN BLOQUEOS'):
-        with st.spinner('Procesando datos técnicos...'):
+        noticias_raw = extraer_noticias()
+        
+        with st.spinner('⚖️ Procesando información con IA...'):
             modelo = detectar_modelo(api_key)
-            noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
-                # Prompt convertido en una tarea de extracción de datos pura
                 prompt = f"""
                 FECHA DE REFERENCIA: {fecha_hoy_str}.
                 TAREA: Extracción de datos de prensa para informe técnico.
@@ -77,13 +85,13 @@ if api_key:
                 - Temas: Economía, Impuestos, Estado.
                 - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
-                FORMATO DE RESPUESTA (PÁRRAFOS DIRECTOS):
-                **TITULAR EN MAYÚSCULAS, NEGRITAS Y EL SÍMBOLO * AL PRINCIPIO Y AL FINAL DE CADA TITULAR**
-                Salto de línea sencillo
-                **MEDIO EN MAYÚSCULAS Y NEGRITAS**
-                Salto de línea sencillo
+                FORMATO DE RESPUESTA (ESTRICTO):
+                ** * TITULAR EN MAYÚSCULAS * **
+                Salto de línea sencillo.
+                **MEDIO EN MAYÚSCULAS**
+                Salto de línea sencillo.
                 Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional.
-                Salto de línea sencillo
+                Salto de línea sencillo.
                 URL en minúsculas.
 
                 (Dos saltos de línea entre bloques. NO agregues introducciones ni conclusiones).
@@ -107,11 +115,8 @@ if api_key:
                 if res.status_code == 200:
                     try:
                         texto = res.json()['candidates'][0]['content']['parts'][0]['text']
-                        # Si el texto es muy corto, algo salió mal
-                        if len(texto) < 50:
-                            st.warning("La respuesta fue demasiado corta. La IA podría estar censurando el contenido.")
                         st.markdown(texto)
                     except:
-                        st.error("La IA bloqueó la respuesta por motivos de seguridad interna.")
+                        st.error("La IA bloqueó la respuesta por motivos de seguridad.")
                 else:
-                    st.error(f"Error de conexión: {res.status_code}")
+                    st.error(f"Error: {res.status_code}")
