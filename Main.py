@@ -7,9 +7,11 @@ import pytz
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 zona_horaria = pytz.timezone('America/La_Paz')
-fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
+# Obtenemos la fecha dinámicamente para que el prompt siempre esté actualizado
+ahora = datetime.now(zona_horaria)
+fecha_hoy_str = ahora.strftime('%A %d de %B de %Y') 
 
-st.title(f"📰 MONITOREO DE NOTICIAS - SIN CBBA: {fecha_hoy}")
+st.title(f"📰 MONITOREO DE NOTICIAS - SIN CBBA: {ahora.strftime('%d/%m/%Y')}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def detectar_modelo(key):
@@ -46,54 +48,58 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
-            # Capturamos un poco más de contexto (limit 15) para tener noticias frescas
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=15):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
                 if a_tag and a_tag.get('href') and len(titulo) > 25:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
-                    # Pasamos todo a la IA, ella decidirá por el contenido
                     data_acumulada += f"Fuente: {fuente['nombre']} | Noticia: {titulo} | URL: {full_link}\n"
         except: continue
     return data_acumulada
 
 if api_key:
     if st.button('🚀 GENERAR MONITOREO DEL DÍA'):
-        with st.spinner('Analizando vigencia de noticias...'):
+        with st.spinner('Analizando vigencia y ordenando noticias...'):
             modelo = detectar_modelo(api_key)
             noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
+                # Prompt reforzado con reglas de exclusión
                 prompt = f"""
-                Hoy es MIÉRCOLES 25 DE FEBRERO DE 2026. 
+                Hoy es {fecha_hoy_str}. 
                 Eres un analista de medios experto en Bolivia. 
                 
-                DATOS EXTRAÍDOS DE PORTADAS:
+                DATOS EXTRAÍDOS:
                 {noticias_raw}
                 
-                FILTRO TEMPORAL CRÍTICO:
-                1. Solo selecciona noticias que hayan sido publicadas el día de HOY, deshecha fechas pasadas.
-                2. Prioriza temas de ECONOMÍA, IMPUESTOS y GOBIERNO/POLÍTICA.
-                3. Da prioridad a noticias de COCHABAMBA y TARIJA.
+                REGLAS DE FILTRADO (MUY IMPORTANTES):
+                1. SOLO noticias publicadas HOY {fecha_hoy_str}. 
+                2. ELIMINA cualquier noticia que mencione fechas pasadas, eventos de hace días o que el contexto indique que no es de hoy.
+                3. PRIORIZA: Economía, Impuestos y Gobierno.
+                4. UBICACIÓN: Máxima prioridad a COCHABAMBA y TARIJA.
 
-                FORMATO DE SALIDA (ESTRICTO):
-                **TITULAR EN MAYÚSCULAS Y NEGRITA con el símbolo* al principio y al final**
-                **Salto de línea simple**
-                **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                **Salto de línea simple**
-                Resumen detallado de 4 a 6 líneas en minúsculas, explicando el suceso actual.
-                **Salto de línea simple**
-                url completa en minúsculas.
-
-                Añade dos saltos de línea simple entre cada bloque de noticias. 
-                No uses etiquetas como "Título:", "Resumen:" ni "URL:".
-                Ordena las noticias de acuerdo al siguiente detalle de medios, pero sin etiquetar el orden mismo:
+                ORDEN DE PRIORIDAD DE MEDIOS (Presenta en este orden exacto):
                 1. OPINIÓN
                 2. LOS TIEMPOS
                 3. LA VOZ DE TARIJA
-                4. MEDIOS TELEVISIVOS (UNITEL, ATB, CADENA A, BOLIVIA TV, RED UNO, UNITEL, BOLIVISIÓN)
-                5. MEDIOS DIGITALES (URGENTE BO, IN NOTICIAS, ENFOQUE NEWS
+                4. TELEVISIÓN (BOLIVIA TV, UNITEL, RED UNO, ATB, BOLIVISIÓN, CADENA A)
+                5. DIGITALES (URGENTE BO, IN NOTICIAS, ENFOQUE NEWS)
+
+                FORMATO DE SALIDA (ESTRICTO):
+                **TITULAR EN MAYÚSCULAS Y NEGRITA**
+                
+                **MEDIO EN MAYÚSCULAS Y NEGRITA**
+                
+                resumen de 4 a 6 líneas en minúsculas, explicando el suceso actual de forma profesional.
+                
+                url completa en minúsculas.
+
+                INSTRUCCIONES FINALES:
+                - Usa dos saltos de línea entre cada bloque.
+                - NO pongas etiquetas como "Resumen:" o "URL:".
+                - No inventes noticias. Si no hay noticias de hoy en un medio, pasa al siguiente.
+                - Detalla nombres y cargos de las personas de cada nota, verificando la veracidad de estos datos.
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
@@ -104,13 +110,18 @@ if api_key:
                         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                     ],
-                    "generationConfig": {"temperature": 0.1} # Bajamos la temperatura para mayor precisión
+                    "generationConfig": {
+                        "temperature": 0.0, # Mínima creatividad para máxima precisión histórica
+                        "topP": 1,
+                        "maxOutputTokens": 2048
+                    }
                 }
                 
                 res = requests.post(url_api, json=payload)
                 if res.status_code == 200:
-                    st.markdown(res.json()['candidates'][0]['content']['parts'][0]['text'])
+                    respuesta_texto = res.json()['candidates'][0]['content']['parts'][0]['text']
+                    st.markdown(respuesta_texto)
                 else:
                     st.error("Error al procesar con la IA.")
             else:
-                st.error("No se pudo obtener información de los portales.")
+                st.error("No se pudo obtener información suficiente de los portales.")
