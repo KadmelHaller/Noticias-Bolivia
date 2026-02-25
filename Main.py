@@ -73,19 +73,27 @@ if api_key:
                 {noticias_raw}
                 
                 FILTRO TEMPORAL CRÍTICO:
-                1. Solo selecciona noticias que estén ocurriendo HOY o que sean de máxima actualidad (últimas 24 horas).
-                2. Si el titular menciona eventos de la semana pasada, meses anteriores o años pasados, IGNÓRALOS. 
-                3. Prioriza temas de ECONOMÍA, IMPUESTOS y GOBIERNO/POLÍTICA.
-                4. Da prioridad a noticias de COCHABAMBA y TARIJA.
+                1. Solo selecciona noticias que hayan sido publicadas el día de HOY, deshecha fechas pasadas.
+                2. Prioriza temas de ECONOMÍA, IMPUESTOS y GOBIERNO/POLÍTICA.
+                3. Da prioridad a noticias de COCHABAMBA y TARIJA.
 
                 FORMATO DE SALIDA (ESTRICTO):
-                **TITULAR EN MAYÚSCULAS Y NEGRITA**
+                **TITULAR EN MAYÚSCULAS Y NEGRITA con el símbolo* al principio y al final**
+                **Salto de línea simple**
                 **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                resumen detallado de 4 a 6 líneas en minúsculas, explicando el suceso actual.
+                **Salto de línea simple**
+                Resumen detallado de 4 a 6 líneas en minúsculas, explicando el suceso actual.
+                **Salto de línea simple**
                 url completa en minúsculas.
 
-                Separa cada dato con salto de línea simple. Dos saltos de línea entre bloques de noticias. 
+                Añade dos saltos de línea simple entre cada bloque de noticias. 
                 No uses etiquetas como "Título:", "Resumen:" ni "URL:".
+                Ordena las noticias de acuerdo al siguiente detalle de medios, pero sin etiquetar el orden mismo:
+                1. OPINIÓN
+                2. LOS TIEMPOS
+                3. LA VOZ DE TARIJA
+                4. MEDIOS TELEVISIVOS (UNITEL, ATB, CADENA A, BOLIVIA TV, RED UNO, UNITEL, BOLIVISIÓN)
+                5. MEDIOS DIGITALES (URGENTE BO, IN NOTICIAS, ENFOQUE NEWS
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
