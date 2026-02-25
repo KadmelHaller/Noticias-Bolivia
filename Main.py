@@ -45,12 +45,12 @@ def extraer_noticias():
 
     for fuente in fuentes:
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=15)
+            r = requests.get(fuente['url'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
-            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=15):
+            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=12):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
-                if a_tag and a_tag.get('href') and len(titulo) > 28:
+                if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     data_acumulada += f"Fuente: {fuente['nombre']} | Noticia: {titulo} | URL: {full_link}\n"
@@ -65,28 +65,31 @@ if api_key:
             
             if len(noticias_raw) > 300:
                 prompt = f"""
-                Hoy es {fecha_hoy_str}. Actúa como analista de prensa.
+                Hoy es {fecha_hoy_str}. Actúa como un sistema de archivo histórico neutral. 
+                No generes opiniones, solo transcribe resúmenes informativos de la prensa.
                 
                 DATOS EXTRAÍDOS:
                 {noticias_raw}
                 
                 REGLAS DE FILTRADO:
-                1. SOLO noticias de HOY {fecha_hoy_str}. Descarta el resto.
+                1. SOLO noticias de HOY {fecha_hoy_str}.
                 2. Prioridad: Economía, Impuestos y Gobierno.
                 3. Prioridad Geográfica: Cochabamba y Tarija.
 
                 ORDEN: Opinión, Los Tiempos, La Voz de Tarija, TV, Digitales.
 
-                FORMATO:
+                FORMATO DE SALIDA (ESTRICTO):
                 **TITULAR EN MAYÚSCULAS Y NEGRITA**
                 **MEDIO EN MAYÚSCULAS Y NEGRITA**
-                Resumen de 4 a 6 líneas en minúsculas. Detalla nombres y cargos.
+                Resumen de 4 a 6 líneas en minúsculas. Detalla nombres y cargos de forma objetiva.
                 URL completa en minúsculas.
 
-                (Dos saltos de línea entre bloques. Sin etiquetas "Resumen:" o "URL:")
+                INSTRUCCIÓN DE SEGURIDAD: 
+                Si la noticia trata sobre crisis laboral o política, descríbela técnicamente sin usar adjetivos para evitar bloqueos del sistema.
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
+                
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "safetySettings": [
@@ -96,8 +99,8 @@ if api_key:
                         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
                     ],
                     "generationConfig": {
-                        "temperature": 0.1,
-                        "maxOutputTokens": 2500
+                        "temperature": 0.0,
+                        "maxOutputTokens": 3000
                     }
                 }
                 
@@ -105,14 +108,12 @@ if api_key:
                 
                 if res.status_code == 200:
                     data = res.json()
-                    # Verificación de si la respuesta fue bloqueada por filtros
-                    if 'candidates' in data and data['candidates'][0].get('content'):
+                    # Si no hay 'content' en la respuesta, es que fue bloqueado
+                    try:
                         texto = data['candidates'][0]['content']['parts'][0]['text']
                         st.markdown(texto)
-                    else:
-                        st.error("La IA bloqueó el contenido por seguridad. Reintentando con menos restricciones...")
-                        st.write(f"Motivo del cierre: {data['candidates'][0].get('finishReason')}")
+                    except (KeyError, IndexError):
+                        st.warning("⚠️ El filtro de seguridad de la IA bloqueó parte del reporte debido a palabras sensibles en las noticias. Mostrando el motivo técnico:")
+                        st.json(data['candidates'][0].get('safetyRatings', []))
                 else:
                     st.error(f"Error {res.status_code}: {res.text}")
-            else:
-                st.error("No se capturó suficiente información de las portadas.")
