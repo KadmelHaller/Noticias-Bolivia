@@ -38,55 +38,71 @@ def extraer_noticias():
         {"nombre": "CADENA A", "url": "https://www.cadenaa.tv/", "base": "https://www.cadenaa.tv"},
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
-        
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_acumulada = ""
 
     for fuente in fuentes:
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=10)
+            r = requests.get(fuente['url'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
-            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=8):
+            # Capturamos un poco más de contexto (limit 15) para tener noticias frescas
+            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=15):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
                 if a_tag and a_tag.get('href') and len(titulo) > 25:
                     link = a_tag['href']
-                    full_link = link if link.startswith('http') else fuente['base'] + link
+                    full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
+                    # Pasamos todo a la IA, ella decidirá por el contenido
                     data_acumulada += f"Fuente: {fuente['nombre']} | Noticia: {titulo} | URL: {full_link}\n"
         except: continue
     return data_acumulada
 
 if api_key:
-    if st.button('🚀 GENERAR MONITOREO'):
-        with st.spinner('Analizando medios...'):
+    if st.button('🚀 GENERAR MONITOREO DEL DÍA'):
+        with st.spinner('Analizando vigencia de noticias...'):
             modelo = detectar_modelo(api_key)
             noticias_raw = extraer_noticias()
             
             if len(noticias_raw) > 300:
-                # Prompt con instrucciones de formato negativas (prohibiciones)
                 prompt = f"""
-                Hoy es {fecha_hoy}. Actúa como editor. Datos: {noticias_raw}
+                Hoy es MIÉRCOLES 25 DE FEBRERO DE 2026. 
+                Eres un analista de medios experto en Bolivia. 
                 
-                Instrucciones Críticas de Formato:
-                1. Entrega noticias (Prioriza Cochabamba, luego Tarija, luego TV nacional, solamente noticias sobre economía, impuestos y gobierno).
-                2. NO uses las etiquetas "Titular", "Medio", "Resumen" o "Enlace". Prohibido poner etiquetas.
-                3. Cada bloque de noticia debe tener exactamente 4 datos directos sin etiqueta separados por saltos de línea simples:
-                   Línea 1: EL TITULAR EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
-                   Línea 2: EL NOMBRE DEL MEDIO EN MAYÚSCULAS Y NEGRITA y luego un salto de línea.
-                   Línea 3: resumen de 4 a 6 líneas, párrafo normal y luego un salto de línea.
-                   Línea 4: url completa en minúsculas.
-                4. Separa cada una de las 4 líneas con un salto de línea simple de forma tal que no se confunda la información.
-                5. Deja dos saltos de línea entre cada bloque de noticia.
-                6. Verifica cada nombre y cargo mencionado en las noticias para que el resumen tenga datos correctos.
+                DATOS EXTRAÍDOS DE PORTADAS:
+                {noticias_raw}
+                
+                FILTRO TEMPORAL CRÍTICO:
+                1. Solo selecciona noticias que estén ocurriendo HOY o que sean de máxima actualidad (últimas 24 horas).
+                2. Si el titular menciona eventos de la semana pasada, meses anteriores o años pasados, IGNÓRALOS. 
+                3. Prioriza temas de ECONOMÍA, IMPUESTOS y GOBIERNO/POLÍTICA.
+                4. Da prioridad a noticias de COCHABAMBA y TARIJA.
+
+                FORMATO DE SALIDA (ESTRICTO):
+                **TITULAR EN MAYÚSCULAS Y NEGRITA**
+                **MEDIO EN MAYÚSCULAS Y NEGRITA**
+                resumen detallado de 4 a 6 líneas en minúsculas, explicando el suceso actual.
+                url completa en minúsculas.
+
+                Separa cada dato con salto de línea simple. Dos saltos de línea entre bloques de noticias. 
+                No uses etiquetas como "Título:", "Resumen:" ni "URL:".
                 """
                 
                 url_api = f"https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent?key={api_key}"
-                res = requests.post(url_api, json={"contents": [{"parts": [{"text": prompt}]}]})
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "safetySettings": [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                    ],
+                    "generationConfig": {"temperature": 0.1} # Bajamos la temperatura para mayor precisión
+                }
                 
+                res = requests.post(url_api, json=payload)
                 if res.status_code == 200:
-                    # Usamos st.text para que no interprete Markdown extraño y respete saltos
                     st.markdown(res.json()['candidates'][0]['content']['parts'][0]['text'])
                 else:
-                    st.error("Error en el procesamiento.")
- 
+                    st.error("Error al procesar con la IA.")
+            else:
+                st.error("No se pudo obtener información de los portales.")
