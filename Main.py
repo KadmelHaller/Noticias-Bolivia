@@ -88,7 +88,7 @@ if api_key:
                 FORMATO DE RESPUESTA (ESTRICTO):
                 ** *TITULAR EN MAYÚSCULAS Y NEGRITAS* **
                 Salto de línea sencillo.
-                **MEDIO EN MAYÚSCULAS**
+                **MEDIO EN MAYÚSCULAS Y NEGRITAS**
                 Salto de línea sencillo.
                 Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional, confirmando nombres y cargos de todos los participantes.
                 Salto de línea sencillo.
