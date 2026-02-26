@@ -81,16 +81,16 @@ if api_key:
                 {noticias_raw}
                 
                 REGLAS DE FILTRADO (OBLIGATORIAS):
-                - Solo eventos del {fecha_hoy_str}.
+                - Solo eventos del {fecha_hoy_str} confirmando la fecha con lectura de cada artículo.
                 - Temas: Economía, Impuestos, Estado.
                 - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
                 FORMATO DE RESPUESTA (ESTRICTO):
-                ** * TITULAR EN MAYÚSCULAS * **
+                ** *TITULAR EN MAYÚSCULAS Y NEGRITAS* **
                 Salto de línea sencillo.
                 **MEDIO EN MAYÚSCULAS**
                 Salto de línea sencillo.
-                Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional.
+                Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional, confirmando nombres y cargos de todos los participantes.
                 Salto de línea sencillo.
                 URL en minúsculas.
 
