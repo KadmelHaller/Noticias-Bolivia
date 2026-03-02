@@ -105,7 +105,7 @@ if api_key:
                     """
                     
                     response = model.generate_content(prompt)
-status_ia.empty()
+                    status_ia.empty()
                     
                     if response.text:
                         st.subheader("📋 Resultado (Selecciona y copia el texto de abajo):")
