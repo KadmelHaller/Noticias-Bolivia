@@ -106,9 +106,10 @@ if api_key:
                     
                     PRIORIDAD TEMÁTICA: Economía, Impuestos, Aduana, Gestión Pública.
                     PRIORIDAD REGIONAL: Cochabamba y Tarija.
+                    PRIORIDAD DE ORDEN: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, MEDIOS DIGITALES
 
                     FORMATO DE SALIDA (ESTRICTO):
-                    TITULAR (TEXTO CON UN SÍMBOLO ASTERISCO AL PRINCIPIO DEL TITULAR Y UN SÍMBOLO ASTERISCO AL FINAL DEL TITULAR, MAYÚSCULAS, NEGRITAS)
+                    TITULAR (TEXTO EN MAYÚSCULAS, NEGRITAS, CON UN SÍMBOLO ASTERISCO AL PRINCIPIO DEL TITULAR Y UN SÍMBOLO ASTERISCO AL FINAL DEL TITULAR)
                     MEDIO (MAYÚSCULAS, NEGRITAS)
                     Párrafo técnico informativo de 5 líneas sin opiniones.
                     URL
