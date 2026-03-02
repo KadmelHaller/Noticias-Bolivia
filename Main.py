@@ -112,18 +112,21 @@ if api_key:
             {noticias_raw}
             
             REGLAS DE FILTRADO:
-            - Solo noticias desde el sábado hasta hoy lunes.
-            - Prioridad: Economía, Impuestos, Estado, Gestión Pública.
+            - Si el día de hoy es lunes, solo noticias desde el sábado hasta hoy lunes.
+            - Si el día de hoy NO es lunes, solo noticias de la fecha actual sin ir más atrás.
+            - Prioridad: Economía, Impuestos, Estado.
             - Prioridad Geográfica: Cochabamba y Tarija.
+            - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
-            FORMATO:
-            ** * TITULAR EN MAYÚSCULAS * **
-            
-            **MEDIO EN MAYÚSCULAS**
-            
+            FORMATO: Tipo de letra Times New Roman, tamaño 10 pts.
+            ** *TITULAR EN MAYÚSCULAS Y NEGRITAS, NO CURSIVAS* **
+            Salto de línea simple
+            MEDIO EN MAYÚSCULAS Y NEGRITAS
+            Salto de línea simple
             Párrafo técnico informativo de 4 a 6 líneas.
-            
+            Salto de línea simple
             URL en minúsculas.
+            DOS saltos de línea para el siguiente bloque
             """
             
             payload = {
