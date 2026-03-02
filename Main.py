@@ -54,7 +54,6 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            # Aumentamos un poco el límite de titulares los lunes para captar lo del finde
             limite = 20 if dia_semana == 0 else 12
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=limite):
                 titulo = tag.get_text().strip()
@@ -82,6 +81,10 @@ if api_key:
                 progress_ia.progress(p / 100)
                 time.sleep(0.05)
             
+            # --- CAMBIO CRÍTICO: URL Y VERSIÓN DE API ---
+            modelo_nombre = "gemini-1.5-flash"
+            url_api = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_nombre}:generateContent?key={api_key}"
+            
             prompt = f"""
             {fecha_referencia}.
             TAREA: Extracción de datos de prensa para informe técnico.
@@ -107,13 +110,13 @@ if api_key:
             (Dos saltos de línea entre bloques. Sin intros ni conclusiones).
             """
             
-            url_api = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "safetySettings": [
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
                 ],
                 "generationConfig": {"temperature": 0.0}
             }
@@ -127,6 +130,9 @@ if api_key:
                     texto = res.json()['candidates'][0]['content']['parts'][0]['text']
                     st.markdown(texto)
                 except:
-                    st.error("Error en la respuesta de la IA.")
+                    st.error("Error al leer la respuesta. Es posible que el contenido haya sido filtrado.")
             else:
-                st.error(f"Error de API: {res.status_code}")
+                # Si falla, mostramos el error detallado para diagnosticar
+                st.error(f"Error de API {res.status_code}: {res.text}")
+        else:
+            st.error("No se capturaron suficientes noticias.")
