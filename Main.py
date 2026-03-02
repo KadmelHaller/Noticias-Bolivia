@@ -21,7 +21,7 @@ if dia_semana == 0 and hora_actual < 12:
 else:
     rango_dias = f"exclusivamente de hoy {ahora.strftime('%d/%m/%Y')} (Vespertino)"
     fecha_ref = f"Noticias de hoy {ahora.strftime('%d/%m/%Y')}"
-    prompt_regla = "SOLO incluye noticias publicadas HOY. Ignora días anteriores."
+    prompt_regla = "SOLO incluye noticias publicadas HOY lunes. Ignora días anteriores."
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
 st.info(f"Filtro activo: {rango_dias}")
@@ -92,30 +92,16 @@ if api_key:
                     prompt = f"""
                     FECHA DEL REPORTE: {fecha_ref}.
                     {prompt_regla}
-                    TAREA: Resumen técnico. No uses asteriscos (*) ni negritas. Solo texto plano.
-                    ENTRADA DE DATOS: {noticias_raw}
-                    PRIORIDAD: Economía, Impuestos, Cochabamba y Tarija.
+                    TAREA: Resumen técnico informativo. 
+                    FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
+                    ENTRADA: {noticias_raw}
 
-                    FORMATO:
-                    TITULAR (MAYÚSCULAS NEGRILLA, UN SÍMBOLO ASTERISCTO ANTES DEL TITULAR, UN SÍMBOLO ASTERISCO DESPUÉS DEL TITULAR)
-                    MEDIO (MAYÚSCULAS NEGRILLA)
-                    Párrafo técnico informativo de 5 líneas.
+                    ORDEN DE SALIDA:
+                    TITULAR (MAYÚSCULAS)
+                    MEDIO (MAYÚSCULAS)
+                    Párrafo informativo de 5 líneas.
                     URL
-                    (Deja 1 línea vacía entre noticias).
+                    (Deja exactamente dos saltos de línea entre cada noticia).
                     """
                     
-                    response = model.generate_content(prompt)
-                    status_ia.empty()
-                    
-                    if response.text:
-                        st.subheader("📋 Resultado listo para copiar:")
-                        
-                        # Usamos st.code porque tiene un botón de "copiar" integrado arriba a la derecha
-                        # Configuramos 'text' para que no resalte colores de programación
-                        st.code(response.text, language="text")
-                        
-                        st.success("¡Listo! Haz clic en el icono de la esquina superior derecha del cuadro gris para copiar.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            else:
-                st.error("No se capturaron suficientes noticias.")
+                    response = model.generate_content(prompt
