@@ -108,8 +108,8 @@ if api_key:
                     PRIORIDAD REGIONAL: Cochabamba y Tarija.
 
                     FORMATO DE SALIDA (ESTRICTO):
-                    TITULAR (MAYÚSCULAS)
-                    MEDIO (MAYÚSCULAS)
+                    TITULAR (MAYÚSCULAS Y NEGRITAS, TEXTO CON UN SÍMBOLO ASTERISCO AL PRINCIPIO DEL TITULAR Y UN SÍMBOLO ASTERISCO AL FINAL DEL TITULAR)
+                    MEDIO (MAYÚSCULAS Y NEGRITAS)
                     Párrafo técnico informativo de 5 líneas sin opiniones.
                     URL
                     (IMPORTANTE: Deja 2 líneas vacías entre noticias).
