@@ -6,13 +6,11 @@ from datetime import datetime, timedelta
 import pytz
 import time
 
-# Configuración de página
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
-dia_semana = ahora.weekday() # 0 es Lunes
+dia_semana = ahora.weekday() 
 
-# Lógica de fechas para el reporte
 if dia_semana == 0:
     rango_dias = "del sábado, domingo y lunes"
     fecha_ref = f"Noticias desde el {(ahora - timedelta(days=2)).strftime('%d/%m/%Y')} al {ahora.strftime('%d/%m/%Y')}"
@@ -21,7 +19,7 @@ else:
     fecha_ref = f"Noticias de hoy {ahora.strftime('%d/%m/%Y')}"
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
-st.info(f"Criterio de búsqueda: {rango_dias}")
+st.info(f"Criterio: {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
@@ -43,11 +41,7 @@ def extraer_noticias():
     headers = {'User-Agent': 'Mozilla/5.0'}
     data_raw = ""
     pb = st.progress(0)
-    st_status = st.empty()
-    
     for i, fuente in enumerate(fuentes):
-        porcentaje = int(((i + 1) / len(fuentes)) * 100)
-        st_status.text(f"🔍 [{porcentaje}%] Escaneando: {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
@@ -61,71 +55,60 @@ def extraer_noticias():
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     data_raw += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
-    
-    st_status.empty()
     pb.empty()
     return data_raw
 
 if api_key:
-    # CONFIGURACIÓN DE LA LIBRERÍA OFICIAL
     genai.configure(api_key=api_key)
     
     if st.button('🚀 GENERAR MONITOREO'):
-        noticias_raw = extraer_noticias()
-        
-        if len(noticias_raw) > 300:
-            status_ia = st.empty()
-            pb_ia = st.progress(0)
-            
-            # Simulamos progreso visual para la IA
-            for p in range(0, 101, 5):
-                status_ia.text(f"⚖️ Procesando información con IA... {p}%")
-                pb_ia.progress(p / 100)
-                time.sleep(0.1)
+        # --- NUEVA LÓGICA DE DETECCIÓN DE MODELO ---
+        modelo_valido = None
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    if 'gemini-1.5-flash' in m.name:
+                        modelo_valido = m.name
+                        break
+            if not modelo_valido:
+                # Si no encuentra 1.5-flash, busca cualquier flash o pro disponible
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        modelo_valido = m.name
+                        break
+        except Exception as e:
+            st.error(f"No se pudo listar modelos: {e}")
 
-            try:
-                # LLAMADA A TRAVÉS DE LA LIBRERÍA (Evita el 404)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                prompt = f"""
-                FECHA: {fecha_ref}.
-                TAREA: Resumen técnico para LibreOffice Writer.
-                IMPORTANTE: No uses asteriscos (*) ni negritas de Markdown. Solo texto plano.
-                
-                ENTRADA:
-                {noticias_raw}
-                
-                REGLAS:
-                - Prioridad temas de Economía e Impuestos.
-                - Prioridad regional: Cochabamba y Tarija.
-                
-                FORMATO:
-                TITULAR (MAYÚSCULAS)
-                MEDIO (MAYÚSCULAS)
-                Resumen descriptivo de 5 líneas.
-                URL (minúsculas)
-                (Deja 2 líneas vacías entre cada noticia).
-                """
-                
-                response = model.generate_content(prompt)
-                
-                status_ia.empty()
-                pb_ia.empty()
-                
-                if response.text:
-                    st.subheader("Resultado para copiar y pegar:")
-                    # Usamos text_area para facilitar el copiado limpio
-                    st.text_area(label="Contenido para LibreOffice", value=response.text, height=600)
+        if modelo_valido:
+            noticias_raw = extraer_noticias()
+            if len(noticias_raw) > 300:
+                status_ia = st.empty()
+                try:
+                    status_ia.text(f"⚖️ Usando modelo: {modelo_valido}...")
+                    model = genai.GenerativeModel(modelo_valido)
                     
-                    st.download_button(
-                        label="📄 Descargar en formato .txt",
-                        data=response.text,
-                        file_name=f"monitoreo_{ahora.strftime('%d_%m_%Y')}.txt",
-                        mime="text/plain"
-                    )
-            except Exception as e:
-                status_ia.empty()
-                pb_ia.empty()
-                st.error(f"Error al conectar con Gemini: {str(e)}")
+                    prompt = f"""
+                    FECHA: {fecha_ref}.
+                    TAREA: Resumen técnico. No uses asteriscos (*) ni negritas. Solo texto plano.
+                    ENTRADA: {noticias_raw}
+                    
+                    FORMATO:
+                    TITULAR (MAYÚSCULAS)
+                    MEDIO (MAYÚSCULAS)
+                    Resumen descriptivo de 5 líneas.
+                    URL
+                    (Deja 2 líneas vacías entre noticias).
+                    """
+                    
+                    response = model.generate_content(prompt)
+                    status_ia.empty()
+                    
+                    if response.text:
+                        st.subheader("Copia para LibreOffice:")
+                        st.text_area(label="", value=response.text, height=600)
+                except Exception as e:
+                    st.error(f"Error en generación: {str(e)}")
+            else:
+                st.error("No se capturaron suficientes noticias.")
         else:
-            st.error("No se capturaron suficientes titulares de los medios.")
+            st.error("Tu API Key no parece tener acceso a modelos de generación de contenido.")
