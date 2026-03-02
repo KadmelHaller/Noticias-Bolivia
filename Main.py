@@ -81,9 +81,9 @@ if api_key:
                 progress_ia.progress(p / 100)
                 time.sleep(0.05)
             
-            # --- CAMBIO CRÍTICO: URL Y VERSIÓN DE API ---
-            modelo_nombre = "gemini-1.5-flash"
-            url_api = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_nombre}:generateContent?key={api_key}"
+            # --- SOLUCIÓN AL ERROR 404 ---
+            # Probamos con la ruta absoluta sin el prefijo repetido
+            url_api = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             
             prompt = f"""
             {fecha_referencia}.
@@ -130,9 +130,15 @@ if api_key:
                     texto = res.json()['candidates'][0]['content']['parts'][0]['text']
                     st.markdown(texto)
                 except:
-                    st.error("Error al leer la respuesta. Es posible que el contenido haya sido filtrado.")
+                    st.error("Error al leer la respuesta de la IA.")
             else:
-                # Si falla, mostramos el error detallado para diagnosticar
-                st.error(f"Error de API {res.status_code}: {res.text}")
+                # Si falla de nuevo, intentamos con la ruta v1 (estable)
+                url_api_v1 = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+                res_v1 = requests.post(url_api_v1, json=payload)
+                if res_v1.status_code == 200:
+                    texto = res_v1.json()['candidates'][0]['content']['parts'][0]['text']
+                    st.markdown(texto)
+                else:
+                    st.error(f"Error persistente en la API: {res_v1.text}")
         else:
-            st.error("No se capturaron suficientes noticias.")
+            st.error("No se capturaron suficientes noticias de los portales.")
