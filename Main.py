@@ -7,19 +7,27 @@ import pytz
 import time
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
+
+# --- LÓGICA DE TIEMPO BOLIVIA ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
-dia_semana = ahora.weekday() 
+dia_semana = ahora.weekday() # 0 es Lunes
+hora_actual = ahora.hour
 
-if dia_semana == 0:
-    rango_dias = "del sábado, domingo y lunes"
+# Determinar rango de búsqueda según tu nueva regla
+if dia_semana == 0 and hora_actual < 12:
+    # Lunes por la mañana: Incluye fin de semana
+    rango_dias = "del sábado, domingo y lunes (Reporte Matutino)"
     fecha_ref = f"Noticias desde el {(ahora - timedelta(days=2)).strftime('%d/%m/%Y')} al {ahora.strftime('%d/%m/%Y')}"
+    prompt_regla = "Como es LUNES POR LA MAÑANA, incluye noticias relevantes desde el sábado pasado hasta hoy."
 else:
-    rango_dias = "de hoy"
+    # Lunes tarde o cualquier otro día: Solo hoy
+    rango_dias = f"exclusivamente de hoy {ahora.strftime('%d/%m/%Y')} (Reporte Vespertino)"
     fecha_ref = f"Noticias de hoy {ahora.strftime('%d/%m/%Y')}"
+    prompt_regla = "SOLO incluye noticias publicadas HOY. Ignora cualquier noticia de días anteriores."
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
-st.info(f"Criterio: {rango_dias}")
+st.info(f"Filtro activo: {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
@@ -46,7 +54,8 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            limite = 20 if dia_semana == 0 else 12
+            # Si es tarde, bajamos el límite de escaneo para que sea más rápido
+            limite = 10 if hora_actual >= 12 else 20
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=limite):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
@@ -62,7 +71,7 @@ if api_key:
     genai.configure(api_key=api_key)
     
     if st.button('🚀 GENERAR MONITOREO'):
-        # --- NUEVA LÓGICA DE DETECCIÓN DE MODELO ---
+        # --- DETECCIÓN DE MODELO ---
         modelo_valido = None
         try:
             for m in genai.list_models():
@@ -71,44 +80,55 @@ if api_key:
                         modelo_valido = m.name
                         break
             if not modelo_valido:
-                # Si no encuentra 1.5-flash, busca cualquier flash o pro disponible
                 for m in genai.list_models():
                     if 'generateContent' in m.supported_generation_methods:
                         modelo_valido = m.name
                         break
-        except Exception as e:
-            st.error(f"No se pudo listar modelos: {e}")
+        except: pass
 
         if modelo_valido:
             noticias_raw = extraer_noticias()
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ Usando modelo: {modelo_valido}...")
+                    status_ia.text(f"⚖️ IA analizando noticias ({rango_dias})...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
-                    FECHA: {fecha_ref}.
-                    TAREA: Resumen técnico. No uses asteriscos (*) ni negritas. Solo texto plano.
-                    ENTRADA: {noticias_raw}
+                    FECHA DEL REPORTE: {fecha_ref}.
+                    {prompt_regla}
                     
-                    FORMATO:
+                    TAREA: Resumen técnico para LibreOffice Writer. 
+                    No uses asteriscos (*) ni negritas de Markdown. Solo texto plano.
+                    
+                    ENTRADA DE DATOS:
+                    {noticias_raw}
+                    
+                    PRIORIDAD TEMÁTICA: Economía, Impuestos, Aduana, Gestión Pública.
+                    PRIORIDAD REGIONAL: Cochabamba y Tarija.
+
+                    FORMATO DE SALIDA (ESTRICTO):
                     TITULAR (MAYÚSCULAS)
                     MEDIO (MAYÚSCULAS)
-                    Resumen descriptivo de 5 líneas.
+                    Párrafo técnico informativo de 5 líneas sin opiniones.
                     URL
-                    (Deja 2 líneas vacías entre noticias).
+                    (IMPORTANTE: Deja 2 líneas vacías entre noticias).
                     """
                     
                     response = model.generate_content(prompt)
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("Copia para LibreOffice:")
-                        st.text_area(label="", value=response.text, height=600)
+                        st.subheader("Copia para LibreOffice Writer:")
+                        st.text_area(label="Texto Limpio", value=response.text, height=600)
+                        
+                        st.download_button(
+                            label="📄 Descargar (.txt)",
+                            data=response.text,
+                            file_name=f"monitoreo_{ahora.strftime('%H%M')}_{ahora.strftime('%d_%m_%Y')}.txt",
+                            mime="text/plain"
+                        )
                 except Exception as e:
-                    st.error(f"Error en generación: {str(e)}")
+                    st.error(f"Error: {e}")
             else:
                 st.error("No se capturaron suficientes noticias.")
-        else:
-            st.error("Tu API Key no parece tener acceso a modelos de generación de contenido.")
