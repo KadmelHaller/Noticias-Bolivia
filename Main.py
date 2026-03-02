@@ -118,8 +118,8 @@ if api_key:
             - Prioridad Geográfica: Cochabamba y Tarija.
             - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
 
-            FORMATO: Tipo de letra Times New Roman, tamaño 10 pts.
-            ** *TITULAR EN MAYÚSCULAS Y NEGRITAS, NO CURSIVAS* **
+            FORMATO:
+            *TITULAR EN MAYÚSCULAS Y NEGRITAS, NO CURSIVAS*
             Salto de línea simple
             MEDIO EN MAYÚSCULAS Y NEGRITAS
             Salto de línea simple
