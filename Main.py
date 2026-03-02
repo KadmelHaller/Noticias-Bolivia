@@ -23,19 +23,6 @@ st.info(f"Criterio de búsqueda: Noticias {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
-# --- FUNCIÓN DE AUTODETECCIÓN (LA QUE EVITA EL 404) ---
-def obtener_ruta_modelo(key):
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-        res = requests.get(url)
-        if res.status_code == 200:
-            modelos = res.json().get('models', [])
-            for m in modelos:
-                if "gemini-1.5-flash" in m['name']:
-                    return m['name']
-        return "models/gemini-1.5-flash"
-    except: return "models/gemini-1.5-flash"
-
 def extraer_noticias():
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
@@ -86,28 +73,20 @@ if api_key:
                 pb_ia.progress(p / 100)
                 time.sleep(0.05)
             
-            # --- CONSTRUCCIÓN SEGURA DE URL ---
-            ruta = obtener_ruta_modelo(api_key)
-            url_api = f"https://generativelanguage.googleapis.com/v1beta/{ruta}:generateContent?key={api_key}"
-            
             prompt = f"""
             FECHA: {fecha_referencia}.
-            TAREA: Resumen informativo técnico.
-            REGLA DE FORMATO: No uses asteriscos (*) ni símbolos de Markdown. Solo texto plano.
+            TAREA: Resumen informativo técnico. 
+            No uses asteriscos (*) ni Markdown. Solo texto plano.
             
-            ENTRADA:
-            {noticias_raw}
+            ENTRADA: {noticias_raw}
             
-            REGLAS DE FILTRADO:
-            - Prioridad: Economía, Impuestos, Cochabamba, Tarija.
+            FORMATO DE SALIDA:
+            TITULAR (MAYÚSCULAS)
+            MEDIO (MAYÚSCULAS)
+            Párrafo descriptivo (4-6 líneas).
+            URL (minúsculas)
             
-            FORMATO DE SALIDA PARA LIBREOFFICE:
-            TITULAR (EN MAYÚSCULAS)
-            MEDIO (EN MAYÚSCULAS)
-            Párrafo descriptivo de 4 a 6 líneas.
-            URL (en minúsculas)
-            
-            (IMPORTANTE: Deja dos saltos de línea vacíos entre noticias).
+            (Deja dos saltos de línea entre cada noticia).
             """
             
             payload = {
@@ -116,24 +95,35 @@ if api_key:
                 "generationConfig": {"temperature": 0.0}
             }
             
-            res = requests.post(url_api, json=payload)
+            # --- SISTEMA DE TRIPLE INTENTO (FALLBACK) ---
+            urls_a_probar = [
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+                f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+            ]
+            
+            respuesta_exitosa = None
+            for url in urls_a_probar:
+                res = requests.post(url, json=payload)
+                if res.status_code == 200:
+                    respuesta_exitosa = res
+                    break
+            
             status_ia.empty()
             pb_ia.empty()
             
-            if res.status_code == 200:
-                texto_final = res.json()['candidates'][0]['content']['parts'][0]['text']
-                
-                # Cuadro de texto para copiar fácilmente
-                st.subheader("Copia el texto de aquí abajo:")
-                st.text_area(label="Resultado limpio para LibreOffice", value=texto_final, height=600)
+            if respuesta_exitosa:
+                texto_final = respuesta_exitosa.json()['candidates'][0]['content']['parts'][0]['text']
+                st.subheader("Copia el texto para LibreOffice:")
+                st.text_area(label="Resultado", value=texto_final, height=600)
                 
                 st.download_button(
-                    label="📄 Descargar Monitoreo (.txt)",
+                    label="📄 Descargar (.txt)",
                     data=texto_final,
                     file_name=f"monitoreo_{ahora.strftime('%d_%m_%Y')}.txt",
                     mime="text/plain"
                 )
             else:
-                st.error(f"Error {res.status_code}: Asegúrate de que la API Key sea correcta.")
+                st.error("No se pudo conectar con la IA después de varios intentos. Verifica si tu API Key tiene permisos para 'Gemini 1.5 Flash'.")
         else:
-            st.error("No se capturaron suficientes noticias de los portales.")
+            st.error("No se capturaron suficientes noticias.")
