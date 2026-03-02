@@ -23,6 +23,7 @@ st.info(f"Criterio de búsqueda: Noticias {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
+# --- FUNCIÓN DE AUTODETECCIÓN (LA QUE EVITA EL 404) ---
 def obtener_ruta_modelo(key):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
@@ -56,7 +57,7 @@ def extraer_noticias():
     st_text = st.empty()
     
     for i, fuente in enumerate(fuentes):
-        st_text.text(f"🔍 Escaneando: {fuente['nombre']}...")
+        st_text.text(f"🔍 [{int(((i+1)/len(fuentes))*100)}%] Escaneando: {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
@@ -85,28 +86,28 @@ if api_key:
                 pb_ia.progress(p / 100)
                 time.sleep(0.05)
             
+            # --- CONSTRUCCIÓN SEGURA DE URL ---
             ruta = obtener_ruta_modelo(api_key)
             url_api = f"https://generativelanguage.googleapis.com/v1beta/{ruta}:generateContent?key={api_key}"
             
             prompt = f"""
-            {fecha_referencia}.
-            TAREA: Informe técnico de prensa. 
-            No uses asteriscos (*) ni negritas de Markdown.
+            FECHA: {fecha_referencia}.
+            TAREA: Resumen informativo técnico.
+            REGLA DE FORMATO: No uses asteriscos (*) ni símbolos de Markdown. Solo texto plano.
             
             ENTRADA:
             {noticias_raw}
             
-            REGLAS:
-            - Solo noticias del rango de fecha indicado.
+            REGLAS DE FILTRADO:
             - Prioridad: Economía, Impuestos, Cochabamba, Tarija.
             
-            FORMATO PARA COPIAR A LIBREOFFICE (ESTRICTO):
-            >>> TITULAR EN MAYÚSCULAS
-            MEDIO EN MAYÚSCULAS
-            Párrafo descriptivo de 4 a 6 líneas. Sin lenguaje emocional.
-            URL en minúsculas.
+            FORMATO DE SALIDA PARA LIBREOFFICE:
+            TITULAR (EN MAYÚSCULAS)
+            MEDIO (EN MAYÚSCULAS)
+            Párrafo descriptivo de 4 a 6 líneas.
+            URL (en minúsculas)
             
-            (Deja un espacio de DOS líneas entre cada noticia para facilitar el pegado).
+            (IMPORTANTE: Deja dos saltos de línea vacíos entre noticias).
             """
             
             payload = {
@@ -121,8 +122,10 @@ if api_key:
             
             if res.status_code == 200:
                 texto_final = res.json()['candidates'][0]['content']['parts'][0]['text']
-                # Mostramos en pantalla (code block para que sea fácil copiar sin formato Markdown)
-                st.text_area("Resultado para copiar y pegar en LibreOffice:", texto_final, height=500)
+                
+                # Cuadro de texto para copiar fácilmente
+                st.subheader("Copia el texto de aquí abajo:")
+                st.text_area(label="Resultado limpio para LibreOffice", value=texto_final, height=600)
                 
                 st.download_button(
                     label="📄 Descargar Monitoreo (.txt)",
@@ -130,4 +133,7 @@ if api_key:
                     file_name=f"monitoreo_{ahora.strftime('%d_%m_%Y')}.txt",
                     mime="text/plain"
                 )
-            else: st.error(f"Error: {res.status_code}")
+            else:
+                st.error(f"Error {res.status_code}: Asegúrate de que la API Key sea correcta.")
+        else:
+            st.error("No se capturaron suficientes noticias de los portales.")
