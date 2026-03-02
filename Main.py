@@ -11,8 +11,7 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 dia_semana = ahora.weekday() # 0 es Lunes
 
-# Lógica de fecha dinámica
-if dia_semana == 0: # Si es Lunes
+if dia_semana == 0:
     rango_dias = "del sábado, domingo y hoy lunes"
     fecha_referencia = f"HOY es {ahora.strftime('%d/%m/%Y')}, pero incluye noticias relevantes desde el sábado {(ahora - timedelta(days=2)).strftime('%d/%m/%Y')}"
 else:
@@ -23,6 +22,26 @@ st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
 st.info(f"Criterio de búsqueda: Noticias {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
+
+# --- FUNCIÓN DE AUTODETECCIÓN DE MODELO ---
+def obtener_ruta_modelo(key):
+    try:
+        # Consultamos la lista de modelos disponibles para esta KEY
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        res = requests.get(url)
+        if res.status_code == 200:
+            modelos = res.json().get('models', [])
+            # Buscamos el modelo flash más actual disponible
+            for m in modelos:
+                if "gemini-1.5-flash" in m['name']:
+                    return m['name'] # Retorna la ruta completa "models/gemini-1.5-flash"
+            # Si no hay 1.5, buscamos cualquier flash
+            for m in modelos:
+                if "flash" in m['name']:
+                    return m['name']
+        return "models/gemini-1.5-flash" # Default por si falla
+    except:
+        return "models/gemini-1.5-flash"
 
 def extraer_noticias():
     fuentes = [
@@ -81,9 +100,9 @@ if api_key:
                 progress_ia.progress(p / 100)
                 time.sleep(0.05)
             
-            # --- SOLUCIÓN AL ERROR 404 ---
-            # Probamos con la ruta absoluta sin el prefijo repetido
-            url_api = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # --- DETECCIÓN DINÁMICA DE LA RUTA ---
+            ruta_modelo = obtener_ruta_modelo(api_key)
+            url_api = f"https://generativelanguage.googleapis.com/v1beta/{ruta_modelo}:generateContent?key={api_key}"
             
             prompt = f"""
             {fecha_referencia}.
@@ -93,21 +112,18 @@ if api_key:
             {noticias_raw}
             
             REGLAS DE FILTRADO:
-            1. Si hoy es Lunes, incluye noticias del sábado y domingo. Si no es lunes, solo noticias de hoy.
-            2. Prioridad Temas: Economía, Impuestos, Estado, Gestión Pública.
-            3. Prioridad Geográfica: Cochabamba y Tarija.
-            4. Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
+            - Solo noticias desde el sábado hasta hoy lunes.
+            - Prioridad: Economía, Impuestos, Estado, Gestión Pública.
+            - Prioridad Geográfica: Cochabamba y Tarija.
 
-            FORMATO DE RESPUESTA:
+            FORMATO:
             ** * TITULAR EN MAYÚSCULAS * **
             
             **MEDIO EN MAYÚSCULAS**
             
-            Párrafo técnico informativo de 4 a 6 líneas sin usar lenguaje emocional.
+            Párrafo técnico informativo de 4 a 6 líneas.
             
             URL en minúsculas.
-
-            (Dos saltos de línea entre bloques. Sin intros ni conclusiones).
             """
             
             payload = {
@@ -130,15 +146,8 @@ if api_key:
                     texto = res.json()['candidates'][0]['content']['parts'][0]['text']
                     st.markdown(texto)
                 except:
-                    st.error("Error al leer la respuesta de la IA.")
+                    st.error("La IA bloqueó la respuesta por motivos de seguridad.")
             else:
-                # Si falla de nuevo, intentamos con la ruta v1 (estable)
-                url_api_v1 = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
-                res_v1 = requests.post(url_api_v1, json=payload)
-                if res_v1.status_code == 200:
-                    texto = res_v1.json()['candidates'][0]['content']['parts'][0]['text']
-                    st.markdown(texto)
-                else:
-                    st.error(f"Error persistente en la API: {res_v1.text}")
+                st.error(f"Error final {res.status_code}: {res.text}")
         else:
-            st.error("No se capturaron suficientes noticias de los portales.")
+            st.error("No se capturaron suficientes noticias.")
