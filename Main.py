@@ -97,11 +97,11 @@ if api_key:
                     ENTRADA: {noticias_raw}
 
                     ORDEN DE SALIDA:
-                    TITULAR (MAYÚSCULAS)
-                    MEDIO (MAYÚSCULAS)
+                    TITULAR (MAYÚSCULAS, NEGRITA Y UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
+                    MEDIO (MAYÚSCULAS Y NEGRITA)
                     Párrafo informativo de 5 líneas.
                     URL
-                    (Deja exactamente dos saltos de línea entre cada noticia).
+                    (Deja exactamente un salto de línea entre cada noticia).
                     """
                     
                     response = model.generate_content(prompt)
@@ -117,7 +117,7 @@ if api_key:
                         styled_html = f"""
                         <div style="
                             font-family: 'Times New Roman', Times, serif; 
-                            font-size: 13px; 
+                            font-size: 10px; 
                             color: black; 
                             background-color: white; 
                             padding: 20px; 
@@ -131,7 +131,7 @@ if api_key:
                         # Renderizamos el HTML en Streamlit
                         st.markdown(styled_html, unsafe_allow_html=True)
                         
-                        st.success("Copia el texto directamente. Ya tiene el formato Times New Roman 10.")
+                        st.success("Éxito")
                 except Exception as e:
                     st.error(f"Error: {e}")
             else:
