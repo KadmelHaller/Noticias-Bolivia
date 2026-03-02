@@ -104,4 +104,35 @@ if api_key:
                     (Deja exactamente dos saltos de línea entre cada noticia).
                     """
                     
-                    response = model.generate_content(prompt
+                    response = model.generate_content(prompt)
+status_ia.empty()
+                    
+                    if response.text:
+                        st.subheader("📋 Resultado (Selecciona y copia el texto de abajo):")
+                        
+                        # CREACIÓN DEL CONTENEDOR HTML CON ESTILO TIMES NEW ROMAN 10
+                        # Reemplazamos los saltos de línea por <br> para que el HTML los respete
+                        html_content = response.text.replace("\n", "<br>")
+                        
+                        styled_html = f"""
+                        <div style="
+                            font-family: 'Times New Roman', Times, serif; 
+                            font-size: 13px; 
+                            color: black; 
+                            background-color: white; 
+                            padding: 20px; 
+                            border: 1px solid #ccc;
+                            line-height: 1.2;
+                        ">
+                            {html_content}
+                        </div>
+                        """
+                        
+                        # Renderizamos el HTML en Streamlit
+                        st.markdown(styled_html, unsafe_allow_html=True)
+                        
+                        st.success("Copia el texto directamente. Ya tiene el formato Times New Roman 10.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            else:
+                st.error("No se capturaron suficientes noticias.")
