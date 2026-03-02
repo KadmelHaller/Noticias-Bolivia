@@ -11,20 +11,17 @@ st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 # --- LÓGICA DE TIEMPO BOLIVIA ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
-dia_semana = ahora.weekday() # 0 es Lunes
+dia_semana = ahora.weekday() 
 hora_actual = ahora.hour
 
-# Determinar rango de búsqueda según tu nueva regla
 if dia_semana == 0 and hora_actual < 12:
-    # Lunes por la mañana: Incluye fin de semana
-    rango_dias = "del sábado, domingo y lunes (Reporte Matutino)"
+    rango_dias = "del sábado, domingo y lunes (Matutino)"
     fecha_ref = f"Noticias desde el {(ahora - timedelta(days=2)).strftime('%d/%m/%Y')} al {ahora.strftime('%d/%m/%Y')}"
-    prompt_regla = "Como es LUNES POR LA MAÑANA, incluye noticias relevantes desde el sábado pasado hasta hoy."
+    prompt_regla = "Incluye noticias relevantes desde el sábado pasado hasta hoy."
 else:
-    # Lunes tarde o cualquier otro día: Solo hoy
-    rango_dias = f"exclusivamente de hoy {ahora.strftime('%d/%m/%Y')} (Reporte Vespertino)"
+    rango_dias = f"exclusivamente de hoy {ahora.strftime('%d/%m/%Y')} (Vespertino)"
     fecha_ref = f"Noticias de hoy {ahora.strftime('%d/%m/%Y')}"
-    prompt_regla = "SOLO incluye noticias publicadas HOY. Ignora cualquier noticia de días anteriores."
+    prompt_regla = "SOLO incluye noticias publicadas HOY. Ignora días anteriores."
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
 st.info(f"Filtro activo: {rango_dias}")
@@ -54,7 +51,6 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            # Si es tarde, bajamos el límite de escaneo para que sea más rápido
             limite = 10 if hora_actual >= 12 else 20
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=limite):
                 titulo = tag.get_text().strip()
@@ -71,7 +67,6 @@ if api_key:
     genai.configure(api_key=api_key)
     
     if st.button('🚀 GENERAR MONITOREO'):
-        # --- DETECCIÓN DE MODELO ---
         modelo_valido = None
         try:
             for m in genai.list_models():
@@ -91,44 +86,35 @@ if api_key:
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ IA analizando noticias ({rango_dias})...")
+                    status_ia.text(f"⚖️ IA analizando noticias...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
                     FECHA DEL REPORTE: {fecha_ref}.
                     {prompt_regla}
-                    
-                    TAREA: Resumen técnico para LibreOffice Writer. 
-                    No uses asteriscos (*) ni negritas de Markdown. Solo texto plano.
-                    
-                    ENTRADA DE DATOS:
-                    {noticias_raw}
-                    
-                    PRIORIDAD TEMÁTICA: Economía, Impuestos, Aduana, Gestión Pública.
-                    PRIORIDAD REGIONAL: Cochabamba y Tarija.
-                    PRIORIDAD DE ORDEN: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, MEDIOS DIGITALES
+                    TAREA: Resumen técnico. No uses asteriscos (*) ni negritas. Solo texto plano.
+                    ENTRADA DE DATOS: {noticias_raw}
+                    PRIORIDAD: Economía, Impuestos, Cochabamba y Tarija.
 
-                    FORMATO DE SALIDA (ESTRICTO):
-                    TITULAR (TEXTO EN MAYÚSCULAS, NEGRITAS, CON UN SÍMBOLO ASTERISCO AL PRINCIPIO DEL TITULAR Y UN SÍMBOLO ASTERISCO AL FINAL DEL TITULAR)
-                    MEDIO (MAYÚSCULAS, NEGRITAS)
-                    Párrafo técnico informativo de 5 líneas sin opiniones.
+                    FORMATO:
+                    TITULAR (MAYÚSCULAS NEGRILLA, UN SÍMBOLO ASTERISCTO ANTES DEL TITULAR, UN SÍMBOLO ASTERISCO DESPUÉS DEL TITULAR)
+                    MEDIO (MAYÚSCULAS NEGRILLA)
+                    Párrafo técnico informativo de 5 líneas.
                     URL
-                    (IMPORTANTE: Deja 1 línea vacía entre noticias).
+                    (Deja 1 línea vacía entre noticias).
                     """
                     
                     response = model.generate_content(prompt)
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("Copia para LibreOffice Writer:")
-                        st.text_area(label="Texto Limpio", value=response.text, height=600)
+                        st.subheader("📋 Resultado listo para copiar:")
                         
-                        st.download_button(
-                            label="📄 Descargar (.txt)",
-                            data=response.text,
-                            file_name=f"monitoreo_{ahora.strftime('%H%M')}_{ahora.strftime('%d_%m_%Y')}.txt",
-                            mime="text/plain"
-                        )
+                        # Usamos st.code porque tiene un botón de "copiar" integrado arriba a la derecha
+                        # Configuramos 'text' para que no resalte colores de programación
+                        st.code(response.text, language="text")
+                        
+                        st.success("¡Listo! Haz clic en el icono de la esquina superior derecha del cuadro gris para copiar.")
                 except Exception as e:
                     st.error(f"Error: {e}")
             else:
