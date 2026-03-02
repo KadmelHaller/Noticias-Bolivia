@@ -23,25 +23,17 @@ st.info(f"Criterio de búsqueda: Noticias {rango_dias}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
-# --- FUNCIÓN DE AUTODETECCIÓN DE MODELO ---
 def obtener_ruta_modelo(key):
     try:
-        # Consultamos la lista de modelos disponibles para esta KEY
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
         res = requests.get(url)
         if res.status_code == 200:
             modelos = res.json().get('models', [])
-            # Buscamos el modelo flash más actual disponible
             for m in modelos:
                 if "gemini-1.5-flash" in m['name']:
-                    return m['name'] # Retorna la ruta completa "models/gemini-1.5-flash"
-            # Si no hay 1.5, buscamos cualquier flash
-            for m in modelos:
-                if "flash" in m['name']:
                     return m['name']
-        return "models/gemini-1.5-flash" # Default por si falla
-    except:
         return "models/gemini-1.5-flash"
+    except: return "models/gemini-1.5-flash"
 
 def extraer_noticias():
     fuentes = [
@@ -59,17 +51,13 @@ def extraer_noticias():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    data_acumulada = ""
-
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    data_raw = ""
+    pb = st.progress(0)
+    st_text = st.empty()
     
-    total_fuentes = len(fuentes)
     for i, fuente in enumerate(fuentes):
-        porcentaje = int(((i + 1) / total_fuentes) * 100)
-        status_text.text(f"🔍 [{porcentaje}%] Escaneando: {fuente['nombre']}...")
-        progress_bar.progress((i + 1) / total_fuentes)
-        
+        st_text.text(f"🔍 Escaneando: {fuente['nombre']}...")
+        pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
@@ -80,77 +68,66 @@ def extraer_noticias():
                 if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
-                    data_acumulada += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
+                    data_raw += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
-    
-    status_text.empty()
-    progress_bar.empty()
-    return data_acumulada
+    st_text.empty()
+    pb.empty()
+    return data_raw
 
 if api_key:
     if st.button('🚀 GENERAR MONITOREO'):
         noticias_raw = extraer_noticias()
-        
         if len(noticias_raw) > 300:
-            progress_ia = st.progress(0)
             status_ia = st.empty()
-            
+            pb_ia = st.progress(0)
             for p in range(0, 96, 4):
                 status_ia.text(f"⚖️ Procesando información con IA... {p}%")
-                progress_ia.progress(p / 100)
+                pb_ia.progress(p / 100)
                 time.sleep(0.05)
             
-            # --- DETECCIÓN DINÁMICA DE LA RUTA ---
-            ruta_modelo = obtener_ruta_modelo(api_key)
-            url_api = f"https://generativelanguage.googleapis.com/v1beta/{ruta_modelo}:generateContent?key={api_key}"
+            ruta = obtener_ruta_modelo(api_key)
+            url_api = f"https://generativelanguage.googleapis.com/v1beta/{ruta}:generateContent?key={api_key}"
             
             prompt = f"""
             {fecha_referencia}.
-            TAREA: Extracción de datos de prensa para informe técnico.
+            TAREA: Informe técnico de prensa. 
+            No uses asteriscos (*) ni negritas de Markdown.
             
-            ENTRADA DE DATOS:
+            ENTRADA:
             {noticias_raw}
             
-            REGLAS DE FILTRADO:
-            - Si el día de hoy es lunes, solo noticias desde el sábado hasta hoy lunes.
-            - Si el día de hoy NO es lunes, solo noticias de la fecha actual sin ir más atrás.
-            - Prioridad: Economía, Impuestos, Estado.
-            - Prioridad Geográfica: Cochabamba y Tarija.
-            - Orden: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, DIGITALES.
-
-            FORMATO:
-            *TITULAR EN MAYÚSCULAS Y NEGRITAS, NO CURSIVAS*
-            Salto de línea simple
-            MEDIO EN MAYÚSCULAS Y NEGRITAS
-            Salto de línea simple
-            Párrafo técnico informativo de 4 a 6 líneas.
-            Salto de línea simple
+            REGLAS:
+            - Solo noticias del rango de fecha indicado.
+            - Prioridad: Economía, Impuestos, Cochabamba, Tarija.
+            
+            FORMATO PARA COPIAR A LIBREOFFICE (ESTRICTO):
+            >>> TITULAR EN MAYÚSCULAS
+            MEDIO EN MAYÚSCULAS
+            Párrafo descriptivo de 4 a 6 líneas. Sin lenguaje emocional.
             URL en minúsculas.
-            DOS saltos de línea para el siguiente bloque
+            
+            (Deja un espacio de DOS líneas entre cada noticia para facilitar el pegado).
             """
             
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
-                ],
+                "safetySettings": [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT"]],
                 "generationConfig": {"temperature": 0.0}
             }
             
             res = requests.post(url_api, json=payload)
             status_ia.empty()
-            progress_ia.empty()
+            pb_ia.empty()
             
             if res.status_code == 200:
-                try:
-                    texto = res.json()['candidates'][0]['content']['parts'][0]['text']
-                    st.markdown(texto)
-                except:
-                    st.error("La IA bloqueó la respuesta por motivos de seguridad.")
-            else:
-                st.error(f"Error final {res.status_code}: {res.text}")
-        else:
-            st.error("No se capturaron suficientes noticias.")
+                texto_final = res.json()['candidates'][0]['content']['parts'][0]['text']
+                # Mostramos en pantalla (code block para que sea fácil copiar sin formato Markdown)
+                st.text_area("Resultado para copiar y pegar en LibreOffice:", texto_final, height=500)
+                
+                st.download_button(
+                    label="📄 Descargar Monitoreo (.txt)",
+                    data=texto_final,
+                    file_name=f"monitoreo_{ahora.strftime('%d_%m_%Y')}.txt",
+                    mime="text/plain"
+                )
+            else: st.error(f"Error: {res.status_code}")
