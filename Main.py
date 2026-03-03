@@ -4,23 +4,28 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
-import time
 import re
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 
-# --- LÓGICA DE TIEMPO BOLIVIA (SIEMPRE HOY) ---
+# --- LÓGICA DE TIEMPO BOLIVIA ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_ref = ahora.strftime('%d/%m/%Y')
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {fecha_ref}")
-st.info(f"Buscando noticias publicadas hoy: {fecha_ref}")
+st.info(f"Prioridad de hora: Texto del artículo > URL > Metadatos")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
+def extraer_hora_url(url):
+    # Patrón: busca 4 dígitos de hora después de una fecha 2024-2026
+    match = re.search(r'202[4-6]\d{2,4}(\d{2})(\d{2})', url)
+    if match:
+        return f"{match.group(1)}:{match.group(2)}"
+    return None
+
 def extraer_noticias():
-    # Lista de fuentes desde portadas principales
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/", "base": "https://www.lostiempos.com"},
@@ -36,10 +41,7 @@ def extraer_noticias():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    }
-    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_raw = ""
     pb = st.progress(0)
     
@@ -49,8 +51,11 @@ def extraer_noticias():
             r = requests.get(fuente['url'], headers=headers, timeout=12)
             r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
+            
+            # Meta global (Nivel 3)
+            meta_global = soup.find("meta", property="article:published_time")
+            meta_txt = meta_global.get("content", "") if meta_global else ""
 
-            # Escaneo de titulares y metadatos básicos
             articulos = soup.find_all(['h1', 'h2', 'h3'], limit=15)
             
             for art in articulos:
@@ -61,13 +66,25 @@ def extraer_noticias():
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     
-                    # Captura de hora visual o metadato de la etiqueta cercana
-                    parent_text = art.parent.get_text()[:150].replace('\n', ' ')
+                    # --- JERARQUÍA DE HORA ---
+                    hora_encontrada = ""
                     
-                    data_raw += f"SITIO_ORIGEN: {fuente['nombre']} | TEXTO_CERCANO: {parent_text} | TEMA: {titulo} | LINK: {full_link}\n"
-        except:
-            continue
-            
+                    # 1. Buscar en el texto/etiquetas del artículo (Nivel 1)
+                    contenedor = art.parent
+                    tag_tiempo = contenedor.find(['time', 'span', 'div'], class_=re.compile(r'time|date|hora|fecha', re.I))
+                    if tag_tiempo:
+                        hora_encontrada = tag_tiempo.get_text().strip()
+                    
+                    # 2. Si no hay, buscar en la URL (Nivel 2)
+                    if not hora_encontrada or len(hora_encontrada) < 3:
+                        hora_encontrada = extraer_hora_url(full_link)
+                    
+                    # 3. Si sigue sin haber, usar metadatos (Nivel 3)
+                    if not hora_encontrada:
+                        hora_encontrada = meta_txt
+
+                    data_raw += f"SITIO: {fuente['nombre']} | HORA_DATA: {hora_encontrada} | TEMA: {titulo} | LINK: {full_link}\n"
+        except: continue
     pb.empty()
     return data_raw
 
@@ -86,29 +103,26 @@ if api_key:
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ IA procesando noticias del {fecha_ref}...")
+                    status_ia.text(f"⚖️ Verificando jerarquía de horas...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
-                    FECHA ACTUAL: {fecha_ref}.
-                    HORA ACTUAL: {ahora.strftime('%H:%M')}.
+                    FECHA ACTUAL: {fecha_ref}. HORA ACTUAL: {ahora.strftime('%H:%M')}.
                     
-                    TAREA: Resumen técnico informativo para monitoreo de prensa.
-                    
-                    INSTRUCCIONES DE FILTRADO:
-                    - Solo incluye noticias publicadas HOY {fecha_ref}.
-                    - Prioridad: Economía, Impuestos, Gobierno
-                    - Prioridad geográfica: Cochabamba y Tarija.
-                    - Ignora deportes, farándula y notas internacionales.
-                    - Orden de presentación: mismo orden estricto que de consulta.
-                    
-                    INSTRUCCIONES DE FORMATO (ESTRICTO):
-                    - *TITULAR EN MAYÚSCULAS Y NEGRITA* (Un asterisco al inicio y otro al final).
-                    - MEDIO EN MAYÚSCULAS Y NEGRITA (Debe coincidir con el SITIO_ORIGEN indicado).
-                    - HORA: Si encuentras la hora exacta en la entrada, pon HH:MM. Si no la encuentras, deduce una hora lógica de hoy (antes de las {ahora.strftime('%H:%M')}) y añade al lado el texto "(aprox.)".
-                    - Párrafo informativo: Entre 4 y 6 líneas.
-                    - URL: Debe ser la URL real proporcionada en la entrada para ese titular.
-                    
+                    INSTRUCCIONES PARA LA HORA:
+                    El campo 'HORA_DATA' contiene la información recolectada.
+                    1. Si 'HORA_DATA' contiene una hora clara (HH:MM), ÚSALA.
+                    2. Si 'HORA_DATA' es una fecha larga o metadato, extrae solo la hora.
+                    3. Si no es clara, búscala en el texto del 'LINK'.
+                    4. Si no hay rastro en ninguno, pon una hora estimada de hoy y añade "(aprox.)".
+
+                    ORDEN DE SALIDA:
+                    *TITULAR EN MAYÚSCULAS Y NEGRITA*
+                    MEDIO EN MAYÚSCULAS Y NEGRITA
+                    HH:MM (Solo los números, sin palabras adicionales)
+                    Párrafo informativo (4 a 6 líneas).
+                    URL
+
                     DATOS DE ENTRADA:
                     {noticias_raw}
                     """
@@ -117,29 +131,16 @@ if api_key:
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("📋 Formato Times New Roman 10:")
-                        
-                        # Convertir negritas de Markdown a HTML
+                        st.subheader("📋 Resultado Jerarquizado (Times New Roman 10):")
                         processed_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text)
                         html_content = processed_text.replace("\n", "<br>")
                         
                         styled_html = f"""
-                        <div style="
-                            font-family: 'Times New Roman', Times, serif; 
-                            font-size: 13.3px; 
-                            color: black; 
-                            background-color: white; 
-                            padding: 25px; 
-                            border: 1px solid #ccc;
-                            line-height: 1.3;
-                            text-align: justify;
-                        ">
+                        <div style="font-family: 'Times New Roman', serif; font-size: 13.3px; color: black; background-color: white; padding: 25px; border: 1px solid #ccc; line-height: 1.3; text-align: justify;">
                             {html_content}
                         </div>
                         """
                         st.markdown(styled_html, unsafe_allow_html=True)
-                        st.success("Monitoreo diario generado.")
+                        st.success("Copia el texto de arriba para tu informe.")
                 except Exception as e:
-                    st.error(f"Error en la IA: {e}")
-            else:
-                st.error("No se pudo obtener información de las portadas. Intenta de nuevo.")
+                    st.error(f"Error: {e}")
