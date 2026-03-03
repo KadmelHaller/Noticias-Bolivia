@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import json
-import time
 
 st.set_page_config(page_title="Monitoreo Bolivia Pro", page_icon="🇧🇴", layout="wide")
 
@@ -15,34 +14,30 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_bonita = ahora.strftime('%d/%m/%Y')
 
-st.title(f"📰 MONITOREO TÉCNICO DE PRENSA: {fecha_hoy_bonita}")
+st.title(f"📰 MONITOREO TÉCNICO: {fecha_hoy_bonita}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
-    texto_completo = soup.get_text(" ", strip=True)
+    texto = soup.get_text(" ", strip=True)
     
-    # 1. OPINIÓN: Ignorar reloj de cabecera
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
             m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
             if m: return m.group(1)
 
-    # 2. LOS TIEMPOS: Formato 13h55 -> 13:55
     if medio == "LOS TIEMPOS":
-        m = re.search(r'(\d{1,2})h(\d{2})', texto_completo)
+        m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
 
-    # 5. UNITEL: Calcular desde tiempo relativo
     if medio == "UNITEL":
-        m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto_completo.lower())
+        m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto.lower())
         if m_rel:
             cant = int(m_rel.group(1))
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
 
-    # 4, 11, 12. METADATOS (ATB, IN NOTICIAS, ENFOQUE)
     if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
@@ -56,8 +51,7 @@ def extraer_hora_especifica(soup, medio):
                         if m: return m.group(1)
             except: continue
 
-    # 3, 6, 7, 8, 10. Búsqueda directa (Tarija, Red Uno, BTV, Bolivisión, Urgente)
-    matches = re.findall(r'(\d{1,2}:\d{2})', texto_completo)
+    matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
         if m != ahora.strftime('%H:%M') and m != "04:00":
             return m
@@ -83,21 +77,15 @@ def procesar_monitoreo():
     pb = st.progress(0)
     
     for i, fuente in enumerate(fuentes):
-        st.write(f"📡 {fuente['nombre']}...")
+        st.write(f"📡 Explorando {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            r = requests.get(fuente['url'], headers=headers, timeout=15)
             soup = BeautifulSoup(r.text, 'html.parser')
-            
-            # Selector para Tarija y general
-            if fuente['nombre'] == "LA VOZ DE TARIJA":
-                links = soup.select('article a[href]')
-            else:
-                links = soup.find_all('a', href=True)
+            links = soup.select('article a[href]') if fuente['nombre'] == "LA VOZ DE TARIJA" else soup.find_all('a', href=True)
 
             procesados = 0
             vistos = set()
-            
             for l in links:
                 url_n = l['href']
                 if not url_n.startswith('http'):
@@ -110,11 +98,10 @@ def procesar_monitoreo():
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
-                    hora = extraer_hora_especifica(soup_n, fuente['nombre'])
+                    h = extraer_hora_especifica(soup_n, fuente['nombre'])
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
-                    
                     if len(cuerpo) > 120:
-                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {hora} | TITULAR: {l.get_text().strip()} | LINK: {url_n} | TXT: {cuerpo[:800]}\n\n"
+                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {l.get_text().strip()} | LINK: {url_n} | TXT: {cuerpo[:800]}\n\n"
                         vistos.add(url_n)
                         procesados += 1
                 except: continue
@@ -124,31 +111,29 @@ def procesar_monitoreo():
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR REPORTE DEFINITIVO'):
-        noticias_raw = procesar_monitoreo()
-        
-        if len(noticias_raw) > 300:
-            # Fallback seguro para el nombre del modelo
+    if st.button('🚀 GENERAR REPORTE'):
+        raw_data = procesar_monitoreo()
+        if len(raw_data) > 300:
+            # --- DETECCIÓN DINÁMICA DE MODELO ---
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                # Prueba rápida de conexión
-                model.list_models() 
+                modelos_visibles = genai.list_models()
+                nombre_modelo = next(m.name for m in modelos_visibles if '1.5-flash' in m.name)
+                model = genai.GenerativeModel(nombre_modelo)
             except:
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash-latest') # Fallback
             
             prompt = f"""
             HOY ES: {fecha_hoy_bonita}.
-            FILTRADO: Solo Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
+            FILTRO: Solo Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
             ELIMINA: Deportes, Farándula, Policiales e Internacional.
-            HORA: Usa el campo 'HORA'. Si está vacío, estima una hora de hoy y pon "(aprox.)".
-            FORMATO: Lista continua, *TITULAR EN NEGRITA*, MEDIO, HH:MM, Resumen (4-6 líneas), URL.
+            HORA: Usa 'HORA'. Si no hay, pon una de hoy con "(aprox.)".
+            FORMATO: Lista continua, *TITULAR*, MEDIO, HH:MM, Resumen (4-6 líneas), URL.
             """
             
             try:
-                res = model.generate_content([prompt, noticias_raw])
-                if res.text:
-                    st.subheader("📋 Resultado:")
-                    processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
-                    st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+                res = model.generate_content([prompt, raw_data])
+                st.subheader("📋 Resultado:")
+                processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Error en IA: {str(e)}")
+                st.error(f"Error de Generación: {str(e)}")
