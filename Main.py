@@ -14,25 +14,9 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_ref = ahora.strftime('%d/%m/%Y')
 
-st.title(f"📰 MONITOREO PROFUNDO: {fecha_ref}")
+st.title(f"📰 MONITOREO FINAL: {fecha_ref}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
-
-def calcular_hora_relativa(texto):
-    """Convierte 'hace x minutos' en una hora HH:MM real."""
-    texto = texto.lower()
-    try:
-        if 'minuto' in texto:
-            mins = int(re.search(r'(\d+)', texto).group(1))
-            hora_real = ahora - timedelta(minutes=mins)
-            return hora_real.strftime('%H:%M')
-        if 'hora' in texto:
-            hrs = int(re.search(r'(\d+)', texto).group(1))
-            hora_real = ahora - timedelta(hours=hrs)
-            return hora_real.strftime('%H:%M')
-    except:
-        pass
-    return None
 
 def extraer_datos_articulo(url, headers):
     try:
@@ -40,49 +24,62 @@ def extraer_datos_articulo(url, headers):
         r.encoding = 'utf-8'
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        hora_interna = ""
-        metadatos_raw = ""
+        hora_final = ""
 
-        # 1. BUSCAR TIEMPO RELATIVO (Caso Unitel: 'hace 1 minuto')
-        etiquetas_tiempo = soup.find_all(['span', 'div', 'p', 'time'], class_=re.compile(r'time|date|fecha|relativo', re.I))
-        for tag in etiquetas_tiempo:
-            txt_t = tag.get_text().strip()
-            res_relativo = calcular_hora_relativa(txt_t)
-            if res_relativo:
-                hora_interna = res_relativo
-                break
+        # --- NIVEL 1: METADATOS TÉCNICOS (La Voz de Tarija, Opinión, etc.) ---
+        # Buscamos en JSON-LD el campo datePublished
+        scripts = soup.find_all('script', type='application/ld+json')
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    graph = item.get('@graph', [item])
+                    for node in graph:
+                        if 'datePublished' in node:
+                            raw_date = node['datePublished'] # Ejemplo: 2026-03-03T11:08:45+00:00
+                            match = re.search(r'(\d{2}):(\d{2})', raw_date)
+                            if match:
+                                hh, mm = int(match.group(1)), match.group(2)
+                                # Ajuste de UTC a BOT (Bolivia Time -4) si detectamos Z o +00
+                                if 'Z' in raw_date or '+00' in raw_date:
+                                    hh = (hh - 4) % 24
+                                hora_final = f"{hh:02d}:{mm}"
+                                break
+                    if hora_final: break
+            except: continue
+            if hora_final: break
 
-        # 2. JSON-LD (Si no hubo relativo)
-        if not hora_interna:
-            scripts = soup.find_all('script', type='application/ld+json')
-            for script in scripts:
-                try:
-                    data = json.loads(script.string)
-                    items = data if isinstance(data, list) else [data]
-                    for item in items:
-                        target = item.get('@graph', [item])
-                        for node in target:
-                            if 'datePublished' in node:
-                                # Extraer solo la hora y ajustar si es necesario
-                                dt_str = node['datePublished']
-                                dt_match = re.search(r'(\d{2}):(\d{2})', dt_str)
-                                if dt_match:
-                                    # Si detectamos que es UTC (termina en Z o +00), restamos 4 horas para Bolivia
-                                    hh, mm = int(dt_match.group(1)), dt_match.group(2)
-                                    if 'Z' in dt_str or '+00' in dt_str:
-                                        hh = (hh - 4) % 24
-                                    hora_interna = f"{hh:02d}:{mm}"
-                                    break
-                except: continue
-                if hora_interna: break
+        # --- NIVEL 2: TIEMPO RELATIVO (Unitel) ---
+        if not hora_final:
+            texto_completo = soup.get_text().lower()
+            # Buscamos patrones como "hace 5 minutos" o "hace 1 hora"
+            rel_match = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto_completo)
+            if rel_match:
+                cantidad = int(rel_match.group(1))
+                unidad = rel_match.group(2)
+                if 'minuto' in unidad:
+                    dt = ahora - timedelta(minutes=cantidad)
+                else:
+                    dt = ahora - timedelta(hours=cantidad)
+                hora_final = dt.strftime('%H:%M')
 
-        # 3. CONTENIDO
-        parrafos = soup.find_all('p', limit=4)
+        # --- NIVEL 3: ETIQUETAS HTML VISIBLES ---
+        if not hora_final:
+            tag_t = soup.find(['time']) or soup.find(class_=re.compile(r'entry-date|published|fecha', re.I))
+            if tag_t:
+                content = tag_t.get('content') or tag_t.get_text()
+                match = re.search(r'(\d{2}):(\d{2})', str(content))
+                if match:
+                    hora_final = match.group(0)
+
+        # EXTRAER TEXTO
+        parrafos = soup.find_all('p', limit=5)
         contenido = " ".join([p.get_text().strip() for p in parrafos])
         
-        return hora_interna, metadatos_raw, contenido
+        return hora_final, contenido
     except:
-        return "", "", ""
+        return "", ""
 
 def extraer_noticias():
     fuentes = [
@@ -109,22 +106,22 @@ def extraer_noticias():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=7)
+            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=8)
             
             for art in articulos:
                 a_tag = art.find('a') or art.find_parent('a')
                 if a_tag and a_tag.get('href'):
                     full_link = a_tag['href'] if a_tag['href'].startswith('http') else fuente['base'].rstrip('/') + a_tag['href']
-                    h_int, m_raw, txt = extraer_datos_articulo(full_link, headers)
+                    h_real, txt = extraer_datos_articulo(full_link, headers)
                     
-                    if len(txt) > 100:
-                        data_raw += f"ORDEN: {i+1} | MEDIO: {fuente['nombre']} | HORA_INT: {h_int} | LINK: {full_link} | TXT: {txt[:600]}\n"
+                    if len(txt) > 150:
+                        data_raw += f"ORDEN: {i+1} | MEDIO: {fuente['nombre']} | HORA_REAL: {h_real} | LINK: {full_link} | TXT: {txt[:700]}\n"
         except: continue
     return data_raw
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR MONITOREO CORREGIDO'):
+    if st.button('🚀 GENERAR MONITOREO'):
         raw_data = extraer_noticias()
         if len(raw_data) > 300:
             modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -136,12 +133,12 @@ if api_key:
             TAREA: Monitoreo técnico de prensa.
             FILTRADO ESTRICTO: ELIMINA Deportes, Farándula e Internacional.
             PRIORIZA: Economía, Impuestos, Gobierno de Cochabamba y Tarija.
-            ORDEN: Según 'ORDEN' (1 al 12).
+            ORDENA: Según 'ORDEN' (1 al 12).
 
-            REGLA DE HORA (JERARQUÍA):
-            1. 'HORA_INT' (Si tiene HH:MM, es la prioridad absoluta).
-            2. Si 'HORA_INT' está vacío, busca en el 'LINK' (patrón de 4 números tras la fecha).
-            3. Si nada funciona, estima y pon "(aprox.)". No uses 04:00 a menos que sea real.
+            REGLA DE HORA (CRÍTICA):
+            1. Si 'HORA_REAL' tiene un valor HH:MM, ÚSALO SIN CAMBIOS. Es el dato extraído del código fuente.
+            2. Si 'HORA_REAL' está vacío, busca la hora en el 'LINK' (ej. 1310).
+            3. Solo si no hay rastro, estima y pon "(aprox.)".
 
             FORMATO:
             *TITULAR EN MAYÚSCULAS Y NEGRITA*
