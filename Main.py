@@ -51,7 +51,7 @@ def extraer_datos_articulo(url, headers):
         if meta_pub:
             metadatos_raw = meta_pub.get("content", "")
 
-        parrafos = soup.find_all('p', limit=4) # Reducido a 4 para ahorrar espacio
+        parrafos = soup.find_all('p', limit=4)
         contenido = " ".join([p.get_text().strip() for p in parrafos])
         
         return hora_interna, metadatos_raw, contenido
@@ -107,22 +107,25 @@ if api_key:
         raw_data = extraer_noticias()
         if len(raw_data) > 300:
             try:
-                # Cambiado a models/gemini-1.5-flash para mayor compatibilidad
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                # --- DETECCIÓN AUTOMÁTICA DEL MODELO ---
+                modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                # Priorizar flash 1.5, si no usar el primero que funcione
+                modelo_final = next((m for m in modelos_disponibles if "1.5-flash" in m), modelos_disponibles[0])
+                
+                model = genai.GenerativeModel(modelo_final)
                 
                 prompt = f"""
                 FECHA: {fecha_ref}. HORA ACTUAL BOLIVIA: {ahora.strftime('%H:%M')}.
-                
                 TAREA: Monitoreo de prensa técnico.
                 FILTRADO: ELIMINA Deportes, Farándula e Internacional.
                 PRIORIZA: Economía, Impuestos, Gobierno de Cochabamba y Tarija.
-                ORDENA: Según 'ORDEN' de la fuente.
+                ORDENA: Según 'ORDEN' de la fuente (1 al 12).
 
                 JERARQUÍA DE HORA:
                 1. 'HORA_INT' (HH:MM).
-                2. Si no hay, busca en 'LINK' (patrón de 4 dígitos tras fecha).
-                3. Si no hay, 'META'.
-                4. Si no hay, estima y pon "(aprox.)".
+                2. 'LINK' (patrón de 4 dígitos tras fecha).
+                3. 'META'.
+                4. Estima y pon "(aprox.)".
 
                 FORMATO SALIDA:
                 *TITULAR EN MAYÚSCULAS Y NEGRITA*
@@ -135,7 +138,7 @@ if api_key:
                 {raw_data}
                 """
                 
-                with st.spinner("IA procesando..."):
+                with st.spinner(f"Usando {modelo_final}..."):
                     res = model.generate_content(prompt)
                 
                 if res.text:
@@ -144,6 +147,6 @@ if api_key:
                     st.markdown(f'<div style="font-family:serif; font-size:13px; text-align:justify; background:white; color:black; padding:20px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
             
             except Exception as e:
-                st.error(f"Error en la comunicación con Gemini: {str(e)}")
+                st.error(f"Error técnico: {str(e)}")
         else:
-            st.warning("No se obtuvo suficiente información de los medios.")
+            st.warning("No se obtuvo suficiente información. Intenta de nuevo.")
