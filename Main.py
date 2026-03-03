@@ -2,51 +2,42 @@ import streamlit as st
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import time
 import re
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 
-# --- LÓGICA DE TIEMPO BOLIVIA ---
+# --- LÓGICA DE TIEMPO BOLIVIA (SIEMPRE HOY) ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
-dia_semana = ahora.weekday() 
-hora_actual = ahora.hour
+fecha_ref = ahora.strftime('%d/%m/%Y')
 
-if dia_semana == 0 and hora_actual < 12:
-    rango_dias = "del sábado, domingo y lunes (Matutino)"
-    fecha_ref = f"Noticias desde el {(ahora - timedelta(days=2)).strftime('%d/%m/%Y')} al {ahora.strftime('%d/%m/%Y')}"
-    prompt_regla = "Incluye noticias relevantes desde el sábado pasado hasta hoy."
-else:
-    rango_dias = f"exclusivamente de hoy {ahora.strftime('%d/%m/%Y')} (Vespertino)"
-    fecha_ref = f"Noticias de hoy {ahora.strftime('%d/%m/%Y')}"
-    prompt_regla = "SOLO incluye noticias publicadas HOY lunes. Ignora días anteriores."
-
-st.title(f"📰 MONITOREO DE NOTICIAS: {ahora.strftime('%d/%m/%Y')}")
-st.info(f"Filtro activo: {rango_dias}")
+st.title(f"📰 MONITOREO DE NOTICIAS: {fecha_ref}")
+st.info(f"Buscando noticias publicadas hoy: {fecha_ref}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_noticias():
+    # Lista de fuentes desde portadas principales
     fuentes = [
-        {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/section/pais", "base": "https://www.opinion.com.bo"},
-        {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/actualidad/economia", "base": "https://www.lostiempos.com"},
-        {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/category/bolivia/", "base": "https://lavozdetarija.com"},
-        {"nombre": "UNITEL", "url": "https://unitel.bo/economia/", "base": "https://unitel.bo"},
-        {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/noticias", "base": "https://www.redbolivision.tv.bo"},
+        {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
+        {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/", "base": "https://www.lostiempos.com"},
+        {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/", "base": "https://lavozdetarija.com"},
+        {"nombre": "UNITEL", "url": "https://unitel.bo/", "base": "https://unitel.bo"},
+        {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/", "base": "https://www.reduno.com.bo"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/", "base": "https://www.atb.com.bo"},
-        {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/principal/noticias", "base": "https://www.boliviatv.bo"},
+        {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/", "base": "https://www.boliviatv.bo"},
+        {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/", "base": "https://www.redbolivision.tv.bo"},
+        {"nombre": "CADENA A", "url": "https://www.cadenaa.tv/", "base": "https://www.cadenaa.tv"},
         {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/", "base": "https://www.urgente.bo"},
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     
-    # Headers más robustos para evitar bloqueos
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     }
     
     data_raw = ""
@@ -55,28 +46,26 @@ def extraer_noticias():
     for i, fuente in enumerate(fuentes):
         pb.progress((i + 1) / len(fuentes))
         try:
-            # Aumentamos el timeout y usamos una sesión para manejar cookies
-            session = requests.Session()
-            r = session.get(fuente['url'], headers=headers, timeout=15)
+            r = requests.get(fuente['url'], headers=headers, timeout=12)
             r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
 
-            # Buscamos noticias en diversas etiquetas comunes
-            articulos = soup.find_all(['h1', 'h2', 'h3', 'article'], limit=25)
+            # Escaneo de titulares y metadatos básicos
+            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=15)
             
             for art in articulos:
-                a_tag = art.find('a') if art.name != 'a' else art
                 titulo = art.get_text().strip()
+                a_tag = art.find('a') or art.find_parent('a')
                 
-                if a_tag and a_tag.get('href') and len(titulo) > 25:
+                if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     
-                    # Intentar extraer fecha/hora del texto del contenedor o del propio link (algunos links llevan la fecha)
-                    contexto_txt = art.parent.get_text()[:200] # Tomamos un poco de texto alrededor
+                    # Captura de hora visual o metadato de la etiqueta cercana
+                    parent_text = art.parent.get_text()[:150].replace('\n', ' ')
                     
-                    data_raw += f"MEDIO: {fuente['nombre']} | CONTEXTO: {contexto_txt} | TEMA: {titulo} | LINK: {full_link}\n"
-        except Exception as e:
+                    data_raw += f"SITIO_ORIGEN: {fuente['nombre']} | TEXTO_CERCANO: {parent_text} | TEMA: {titulo} | LINK: {full_link}\n"
+        except:
             continue
             
     pb.empty()
@@ -88,9 +77,8 @@ if api_key:
     if st.button('🚀 GENERAR MONITOREO'):
         modelo_valido = None
         try:
-            # Lista de modelos para asegurar compatibilidad
-            modelos_compatibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            modelo_valido = next((m for m in modelos_compatibles if "1.5-flash" in m), modelos_compatibles[0])
+            modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            modelo_valido = next((m for m in modelos if "1.5-flash" in m), modelos[0])
         except: pass
 
         if modelo_valido:
@@ -98,37 +86,40 @@ if api_key:
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ IA analizando noticias de múltiples medios...")
+                    status_ia.text(f"⚖️ IA procesando noticias del {fecha_ref}...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
-                    FECHA DEL REPORTE: {fecha_ref}.
-                    {prompt_regla}
+                    FECHA ACTUAL: {fecha_ref}.
+                    HORA ACTUAL: {ahora.strftime('%H:%M')}.
                     
-                    TAREA: Resumen técnico para monitoreo de prensa.
+                    TAREA: Resumen técnico informativo para monitoreo de prensa.
                     
-                    PRIORIDAD: 1. Economía e Impuestos, 2. Govierno, 3. Cochabamba y Tarija. 4. Orden de medios: Opinión, Los Tiempos, La Voz de Tarija, TV, medios digitales.
-                    REGLA CRÍTICA DE HORA: Revisa el campo 'CONTEXTO' y el 'LINK' para encontrar la hora. Si el link dice algo como '/2024/03/02/14-30/', la hora es 14:30. Si no hay nada, estima una hora lógica de hoy lunes entre las 07:00 y las {ahora.strftime('%H:%M')}. No pongas "Hora no disponible", asume una hora basada en la frescura.
-
-                    ENTRADA: {noticias_raw}
-
-                    ORDEN DE SALIDA (ESTRICTO):
-                    *TITULAR EN MAYÚSCULAS Y NEGRITA* (con un asterisco al principio y otro al final)
-                    MEDIO EN MAYÚSCULAS Y NEGRITA
-                    HH:MM (Solo la hora, sin etiquetas)
-                    Párrafo informativo (4 a 6 líneas).
-                    URL (en minúsculas).
-
-                    (Exactamente un salto de línea entre noticias. Sin asteriscos de markdown excepto en el titular).
+                    INSTRUCCIONES DE FILTRADO:
+                    - Solo incluye noticias publicadas HOY {fecha_ref}.
+                    - Prioridad: Economía, Impuestos, Gobierno
+                    - Prioridad geográfica: Cochabamba y Tarija.
+                    - Ignora deportes, farándula y notas internacionales.
+                    - Orden de presentación: mismo orden estricto que de consulta.
+                    
+                    INSTRUCCIONES DE FORMATO (ESTRICTO):
+                    - *TITULAR EN MAYÚSCULAS Y NEGRITA* (Un asterisco al inicio y otro al final).
+                    - MEDIO EN MAYÚSCULAS Y NEGRITA (Debe coincidir con el SITIO_ORIGEN indicado).
+                    - HORA: Si encuentras la hora exacta en la entrada, pon HH:MM. Si no la encuentras, deduce una hora lógica de hoy (antes de las {ahora.strftime('%H:%M')}) y añade al lado el texto "(aprox.)".
+                    - Párrafo informativo: Entre 4 y 6 líneas.
+                    - URL: Debe ser la URL real proporcionada en la entrada para ese titular.
+                    
+                    DATOS DE ENTRADA:
+                    {noticias_raw}
                     """
                     
                     response = model.generate_content(prompt)
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("📋 Formato Times New Roman 10 (Listo para copiar):")
+                        st.subheader("📋 Formato Times New Roman 10:")
                         
-                        # Limpieza de negritas Markdown a HTML
+                        # Convertir negritas de Markdown a HTML
                         processed_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text)
                         html_content = processed_text.replace("\n", "<br>")
                         
@@ -147,8 +138,8 @@ if api_key:
                         </div>
                         """
                         st.markdown(styled_html, unsafe_allow_html=True)
-                        st.success("Monitoreo generado con éxito.")
+                        st.success("Monitoreo diario generado.")
                 except Exception as e:
                     st.error(f"Error en la IA: {e}")
             else:
-                st.error("Los medios bloquearon la conexión o no hay noticias nuevas. Intenta de nuevo.")
+                st.error("No se pudo obtener información de las portadas. Intenta de nuevo.")
