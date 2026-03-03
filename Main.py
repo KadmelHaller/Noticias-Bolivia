@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import json
+import time
 
 st.set_page_config(page_title="Monitoreo SIN CBBA", page_icon="🇧🇴")
 
@@ -14,71 +15,65 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_ref = ahora.strftime('%d/%m/%Y')
 
-st.title(f"📰 MONITOREO FINAL: {fecha_ref}")
+st.title(f"📰 MONITOREO TOTAL: {fecha_ref}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
-def calcular_hora_relativa(texto):
-    texto = texto.lower()
-    try:
-        match = re.search(r'(\d+)\s+(minuto|hora)', texto)
-        if match:
-            cantidad = int(match.group(1))
-            unidad = match.group(2)
-            dt = ahora - (timedelta(minutes=cantidad) if 'minuto' in unidad else timedelta(hours=cantidad))
-            return dt.strftime('%H:%M')
-    except: pass
-    return None
-
 def extraer_datos_articulo(url, headers):
-    # Evitar links basura de navegación
-    if any(x in url.lower() for x in ['/category/', '/tag/', '/author/', '/page/', '/seccion/']):
-        return None, None
-
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        # Reintento para sitios difíciles
+        for _ in range(2):
+            r = requests.get(url, headers=headers, timeout=12)
+            if r.status_code == 200: break
+            time.sleep(1)
+            
         r.encoding = 'utf-8'
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        hora_final = ""
+        hora_detectada = ""
 
-        # 1. NIVEL 1: JSON-LD (Metadatos técnicos)
-        scripts = soup.find_all('script', type='application/ld+json')
-        for script in scripts:
-            try:
-                data = json.loads(script.string)
-                items = data if isinstance(data, list) else [data]
-                for item in items:
-                    graph = item.get('@graph', [item])
-                    for node in graph:
-                        if 'datePublished' in node:
-                            raw_date = node['datePublished']
-                            match = re.search(r'(\d{2}):(\d{2})', raw_date)
-                            if match:
-                                hh, mm = int(match.group(1)), match.group(2)
-                                # Solo ajustar si es explícitamente UTC y la hora resultaría lógica
-                                if 'Z' in raw_date or '+00' in raw_date:
-                                    hh = (hh - 4) % 24
-                                if not (hh == 4 and mm == "00"): # Evitar el bug del 04:00
-                                    hora_final = f"{hh:02d}:{mm}"
+        # ESTRATEGIA 1: Buscar texto con formato HH:MM en el cuerpo (Muy efectivo para Opinión/Tarija)
+        # Buscamos en las primeras etiquetas de la nota
+        elementos_fecha = soup.find_all(['span', 'div', 'time', 'p'], limit=15)
+        for el in elementos_fecha:
+            txt = el.get_text().strip()
+            # Patrón de hora: 10:59, 11:08, etc.
+            match = re.search(r'(\d{1,2}:\d{2})', txt)
+            if match:
+                hora_detectada = match.group(1)
+                break
+
+        # ESTRATEGIA 2: JSON-LD (Si la 1 falla)
+        if not hora_detectada:
+            scripts = soup.find_all('script', type='application/ld+json')
+            for script in scripts:
+                try:
+                    data = json.loads(script.string)
+                    items = data if isinstance(data, list) else [data]
+                    for item in items:
+                        target = item.get('@graph', [item])
+                        for node in target:
+                            if 'datePublished' in node:
+                                m = re.search(r'(\d{2}:\d{2})', str(node['datePublished']))
+                                if m: 
+                                    hora_detectada = m.group(1)
                                     break
-            except: continue
-            if hora_final: break
+                except: continue
 
-        # 2. NIVEL 2: TIEMPO RELATIVO (Fundamental para UNITEL)
-        if not hora_final:
-            for tag in soup.find_all(['span', 'div', 'time']):
-                rel = calcular_hora_relativa(tag.get_text())
-                if rel:
-                    hora_final = rel
-                    break
+        # ESTRATEGIA 3: Tiempo relativo
+        if not hora_detectada:
+            rel_match = re.search(r'hace\s+(\d+)\s+(minuto|hora)', soup.get_text().lower())
+            if rel_match:
+                cant = int(rel_match.group(1))
+                dt = ahora - (timedelta(minutes=cant) if 'min' in rel_match.group(2) else timedelta(hours=cant))
+                hora_detectada = dt.strftime('%H:%M')
 
-        # 3. EXTRAER CONTENIDO
-        parrafos = soup.find_all('p', limit=5)
+        # EXTRAER TEXTO (Bajamos el límite a 100 para que entren notas cortas de Tarija)
+        parrafos = soup.find_all('p', limit=6)
         contenido = " ".join([p.get_text().strip() for p in parrafos])
-        if len(contenido) < 200: return None, None # Ignorar páginas vacías o de error
+        if len(contenido) < 100: return None, None
         
-        return hora_final, contenido
+        return hora_detectada, contenido
     except:
         return None, None
 
@@ -98,60 +93,75 @@ def extraer_noticias():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     
-    # User-Agent más "humano" para evitar bloqueos de Los Tiempos
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
     data_raw = ""
     pb = st.progress(0)
+    info_st = st.empty()
     
     for i, fuente in enumerate(fuentes):
+        info_st.text(f"Conectando con {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            r = requests.get(fuente['url'], headers=headers, timeout=15)
             soup = BeautifulSoup(r.text, 'html.parser')
-            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=10)
+            # Buscamos más links para asegurar que no se pierdan noticias
+            links_encontrados = soup.find_all('a', href=True)
             
-            for art in articulos:
-                a_tag = art.find('a') or art.find_parent('a')
-                if a_tag and a_tag.get('href'):
-                    full_link = a_tag['href'] if a_tag['href'].startswith('http') else fuente['base'].rstrip('/') + a_tag['href']
-                    h_real, txt = extraer_datos_articulo(full_link, headers)
+            procesados = 0
+            for link in links_encontrados:
+                if procesados >= 8: break # Límite por medio
+                
+                url_n = link['href']
+                if url_n.startswith('/') or fuente['base'] in url_n:
+                    full_link = url_n if url_n.startswith('http') else fuente['base'].rstrip('/') + url_n
                     
-                    if txt:
-                        data_raw += f"ID_MEDIO: {i+1} | MEDIO: {fuente['nombre']} | HORA_DOC: {h_real} | LINK: {full_link} | TEXTO: {txt[:700]}\n"
+                    # Filtro básico de URL para evitar secciones
+                    if any(x in full_link for x in ['/category/', '/tag/', '/author/', '/page/']): continue
+                    
+                    h_res, t_res = extraer_datos_articulo(full_link, headers)
+                    
+                    if t_res and len(link.get_text()) > 25:
+                        data_raw += f"ID: {i+1} | MEDIO: {fuente['nombre']} | HORA_DOC: {h_res} | TEMA: {link.get_text().strip()} | LINK: {full_link} | TXT: {t_res[:700]}\n"
+                        procesados += 1
         except: continue
+    info_st.empty()
     return data_raw
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR MONITOREO LIMPIO'):
+    if st.button('🚀 EJECUTAR MONITOREO COMPLETO'):
         raw_data = extraer_noticias()
         if len(raw_data) > 300:
             modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             model = genai.GenerativeModel(next((m for m in modelos if "1.5-flash" in m), modelos[0]))
             
             prompt = f"""
-            HOY ES: {fecha_ref}. HORA ACTUAL BOLIVIA: {ahora.strftime('%H:%M')}.
+            HOY ES: {fecha_ref}. HORA ACTUAL: {ahora.strftime('%H:%M')}.
             
-            REGLAS:
-            1. FILTRADO: ELIMINA Deportes, Farándula, Internacional y páginas de error/portada.
-            2. PRIORIZA: Economía, Gobierno, Cochabamba y Tarija.
-            3. ORDEN: Agrupa por 'MEDIO' siguiendo el orden de 'ID_MEDIO' (1 al 12). No escribas "ORDEN: ##" en el resultado.
-            
-            REGLA DE HORA:
-            - Usa 'HORA_DOC'. Si es "04:00" y la noticia es reciente, ignórala y pon la hora actual aprox. o busca en el LINK.
-            - Si no hay hora, pon una hora lógica de hoy y añade "(aprox.)".
+            INSTRUCCIONES DE FILTRADO:
+            - SOLO quédate con noticias de Economía, Gobierno, Impuestos o gestión municipal.
+            - ELIMINA TODO lo referente a Deportes, Farándula, Sucesos Policiales menores o Internacional.
+            - PRIORIZA Cochabamba y Tarija.
 
-            FORMATO DE SALIDA (ESTRICTO):
+            INSTRUCCIONES DE HORA:
+            - SI 'HORA_DOC' tiene una hora (ej. 10:59), ÚSALA OBLIGATORIAMENTE. No pongas "(aprox.)" si hay un dato en 'HORA_DOC'.
+            - Si 'HORA_DOC' está vacío, estima la hora basándote en el 'LINK' o el contexto de "noticia de hoy" y pon "(aprox.)".
+
+            FORMATO DE SALIDA:
+            Agrupa por MEDIO siguiendo el orden del ID (1 al 12).
             *TITULAR EN MAYÚSCULAS Y NEGRITA*
             MEDIO EN MAYÚSCULAS Y NEGRITA
             HH:MM
-            Párrafo de 4-6 líneas detallado.
+            Resumen informativo detallado (4-6 líneas).
             URL
 
-            DATOS: {raw_data}
+            DATOS:
+            {raw_data}
             """
-            res = model.generate_content(prompt)
+            with st.spinner("IA generando reporte final..."):
+                res = model.generate_content(prompt)
+            
             if res.text:
-                st.subheader("📋 Informe Final:")
+                st.subheader("📋 Monitoreo de Prensa:")
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
-                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:20px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
