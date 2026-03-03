@@ -99,8 +99,8 @@ if api_key:
                     ENTRADA: {noticias_raw}
 
                     ORDEN DE SALIDA:
-                    TITULAR (MAYÚSCULAS, NEGRILLA Y UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
-                    MEDIO (MAYÚSCULAS Y NEGRILLA)
+                    TITULAR (MAYÚSCULAS, BOLD Y UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
+                    MEDIO (MAYÚSCULAS Y BOLD)
                     Párrafo informativo de entre 4 y 6 líneas.
                     URL
                     (Deja exactamente un salto de línea entre cada noticia, confirma al 100% los nombres y cargos de las personas que aparecen en las noticias).
