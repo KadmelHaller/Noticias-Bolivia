@@ -80,4 +80,78 @@ def procesar_monitoreo():
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36'}
     data_final = ""
-    pb = st.
+    pb = st.progress(0)
+    
+    for i, fuente in enumerate(fuentes):
+        st.write(f"📡 {fuente['nombre']}...")
+        pb.progress((i + 1) / len(fuentes))
+        try:
+            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            soup = BeautifulSoup(r.text, 'html.parser')
+            
+            # Selector especial para Tarija que usa <article>
+            links = soup.find_all(['a', 'article'], href=True) if fuente['nombre'] != "LA VOZ DE TARIJA" else soup.select('article a[href]')
+            if not links: links = soup.find_all('a', href=True)
+
+            procesados = 0
+            vistos = set()
+            
+            for l in links:
+                url_n = l['href'] if l.name == 'a' else l.find('a')['href']
+                if not url_n.startswith('http'):
+                    base = fuente['url'].split('.bo')[0] + '.bo' if '.bo' in fuente['url'] else fuente['url'].rstrip('/')
+                    url_n = base + ('' if url_n.startswith('/') else '/') + url_n
+                
+                if len(l.get_text().strip()) < 30 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/']):
+                    continue
+                
+                try:
+                    rn = requests.get(url_n, headers=headers, timeout=10)
+                    soup_n = BeautifulSoup(rn.text, 'html.parser')
+                    hora = extraer_hora_especifica(soup_n, fuente['nombre'], url_n)
+                    p_list = soup_n.find_all('p', limit=6)
+                    cuerpo = " ".join([p.get_text().strip() for p in p_list if len(p.get_text()) > 25])
+                    
+                    if len(cuerpo) > 120:
+                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {hora} | TITULAR: {l.get_text().strip()} | LINK: {url_n} | TXT: {cuerpo[:800]}\n\n"
+                        vistos.add(url_n)
+                        procesados += 1
+                except: continue
+                if procesados >= 5: break
+        except: continue
+    return data_final
+
+if api_key:
+    genai.configure(api_key=api_key)
+    if st.button('🚀 GENERAR REPORTE DEFINITIVO'):
+        noticias_raw = procesar_monitoreo()
+        
+        if len(noticias_raw) > 300:
+            # --- CORRECCIÓN DE ERROR NOTFOUND ---
+            model_name = 'gemini-1.5-flash'
+            try:
+                # Intentamos listar para ver el nombre exacto
+                available_models = [m.name for m in genai.list_models()]
+                model_id = next((m for m in available_models if "1.5-flash" in m), "models/gemini-1.5-flash")
+                model = genai.GenerativeModel(model_id)
+            except:
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
+            
+            prompt = f"""
+            HOY ES: {fecha_hoy_bonita}.
+            TAREA: Monitoreo técnico. Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
+            ELIMINA: Deportes, Farándula, Policiales e Internacional.
+            REGLA DE HORA: Usa 'HORA'. Si está vacía, estima una hora de hoy y pon "(aprox.)".
+            FORMATO: Lista continua, *TITULAR*, MEDIO, HH:MM, Resumen (4-6 líneas), URL.
+            """
+            
+            try:
+                res = model.generate_content([prompt, noticias_raw])
+                if res.text:
+                    st.subheader("📋 Resultado:")
+                    processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                    st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error al conectar con la IA: {str(e)}")
+        else:
+            st.error("No se recolectaron noticias suficientes.")
