@@ -19,16 +19,15 @@ st.title(f"📰 MONITOREO PROFUNDO: {fecha_ref}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_datos_articulo(url, headers):
-    """Extrae texto, hora de metadatos JSON-LD y etiquetas internas."""
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=8)
         r.encoding = 'utf-8'
         soup = BeautifulSoup(r.text, 'html.parser')
         
         hora_interna = ""
         metadatos_raw = ""
 
-        # 1. BUSCAR EN JSON-LD (La hora más precisa: datePublished)
+        # 1. JSON-LD
         scripts = soup.find_all('script', type='application/ld+json')
         for script in scripts:
             try:
@@ -38,21 +37,21 @@ def extraer_datos_articulo(url, headers):
                     target = item.get('@graph', [item])
                     for node in target:
                         if 'datePublished' in node:
-                            dt_match = re.search(r'(\d{2}:\d{2})', node['datePublished'])
+                            dt_match = re.search(r'(\d{2}:\d{2})', str(node['datePublished']))
                             if dt_match:
                                 hora_interna = dt_match.group(1)
                                 break
             except: continue
             if hora_interna: break
 
-        # 2. CAPTURAR OTROS METADATOS (Para la jerarquía de la IA)
+        # 2. Metatags
         meta_pub = soup.find("meta", property="article:published_time") or \
-                   soup.find("meta", itemprop="datePublished")
+                   soup.find("meta", itemprop="datePublished") or \
+                   soup.find("meta", name="publish-date")
         if meta_pub:
             metadatos_raw = meta_pub.get("content", "")
 
-        # 3. EXTRAER TEXTO PARA FILTRADO Y RESUMEN
-        parrafos = soup.find_all('p', limit=6)
+        parrafos = soup.find_all('p', limit=4) # Reducido a 4 para ahorrar espacio
         contenido = " ".join([p.get_text().strip() for p in parrafos])
         
         return hora_interna, metadatos_raw, contenido
@@ -75,31 +74,27 @@ def extraer_noticias():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     data_raw = ""
     pb = st.progress(0)
     st_info = st.empty()
     
     for i, fuente in enumerate(fuentes):
-        st_info.text(f"Procesando {fuente['nombre']}...")
+        st_info.text(f"Scrapeando: {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
-            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=10)
+            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=7)
             
             for art in articulos:
                 a_tag = art.find('a') or art.find_parent('a')
                 if a_tag and a_tag.get('href'):
-                    link_href = a_tag['href']
-                    full_link = link_href if link_href.startswith('http') else fuente['base'].rstrip('/') + link_href
+                    full_link = a_tag['href'] if a_tag['href'].startswith('http') else fuente['base'].rstrip('/') + a_tag['href']
+                    h_int, m_raw, txt = extraer_datos_articulo(full_link, headers)
                     
-                    # SCRAPING PROFUNDO
-                    h_interna, m_raw, texto_it = extraer_datos_articulo(full_link, headers)
-                    
-                    if len(texto_it) > 100:
-                        # Enviamos todos los datos recolectados para que la IA aplique la jerarquía
-                        data_raw += f"ORDEN_FUENTE: {i+1} | MEDIO: {fuente['nombre']} | HORA_INTERNA: {h_interna} | METADATO_PAGINA: {m_raw} | TEMA: {art.get_text().strip()} | LINK: {full_link} | TEXTO: {texto_it[:900]}\n"
+                    if len(txt) > 100:
+                        data_raw += f"ORDEN: {i+1} | MEDIO: {fuente['nombre']} | HORA_INT: {h_int} | META: {m_raw} | TEMA: {art.get_text().strip()} | LINK: {full_link} | TXT: {txt[:600]}\n"
         except: continue
     
     pb.empty()
@@ -109,50 +104,46 @@ def extraer_noticias():
 if api_key:
     genai.configure(api_key=api_key)
     if st.button('🚀 GENERAR MONITOREO PROFUNDO'):
-        noticias_raw = extraer_noticias()
-        if len(noticias_raw) > 500:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            prompt = f"""
-            HOY ES: {fecha_ref}. HORA ACTUAL EN BOLIVIA: {ahora.strftime('%H:%M')}.
-            
-            TAREA: Resumen técnico para monitoreo de prensa.
-            
-            FILTRADO ESTRICTO:
-            - ELIMINA noticias de Deportes, Farándula, Espectáculos, Horóscopo o Internacional.
-            - PRIORIZA: Economía, Impuestos, Gobierno.
-            - PRIORIZA GEOGRÁFICAMENTE: Cochabamba y Tarija.
-            - ORDENA LOS RESULTADOS DE ACUERDO AL NÚMERO DE 'ORDEN_FUENTE'.
-            
-            REGLA DE HORA (JERARQUÍA ESTRICTA):
-            1. Usa la hora encontrada en 'HORA_INTERNA'. Límpiala para que sea solo HH:MM.
-            2. Si 'HORA_INTERNA' no tiene la hora, búscala en el texto del 'LINK' (ej. números como 1108).
-            3. Si 'HORA_INTERNA' no tiene la hora y 'LINK' no tiene la hora, búscala en 'METADATO_PAGINA'.
-            4. Solo como último recurso estima una hora lógica y pon "(aprox.)".
-
-            ORDEN DE SALIDA (ESTRICTO):
-            *TITULAR EN MAYÚSCULAS Y NEGRITA*
-            MEDIO EN MAYÚSCULAS Y NEGRITA
-            HH:MM (Sin etiquetas como 'Hora:')
-            Párrafo informativo (4 a 6 líneas detalladas).
-            URL
-
-            ENTRADA:
-            {noticias_raw}
-            """
-            
-            with st.spinner("IA aplicando filtros y jerarquía de horas..."):
-                res = model.generate_content(prompt)
+        raw_data = extraer_noticias()
+        if len(raw_data) > 300:
+            try:
+                # Cambiado a models/gemini-1.5-flash para mayor compatibilidad
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
                 
-            if res.text:
-                st.subheader("📋 Formato Final (Times New Roman 10):")
-                # Limpiar posibles negritas markdown sobrantes y aplicar formato HTML
-                processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                prompt = f"""
+                FECHA: {fecha_ref}. HORA ACTUAL BOLIVIA: {ahora.strftime('%H:%M')}.
                 
-                html_final = f"""
-                <div style="font-family: 'Times New Roman', serif; font-size: 13.3px; color: black; background-color: white; padding: 25px; border: 1px solid #ccc; line-height: 1.3; text-align: justify;">
-                    {processed.replace("\n", "<br>")}
-                </div>
+                TAREA: Monitoreo de prensa técnico.
+                FILTRADO: ELIMINA Deportes, Farándula e Internacional.
+                PRIORIZA: Economía, Impuestos, Gobierno de Cochabamba y Tarija.
+                ORDENA: Según 'ORDEN' de la fuente.
+
+                JERARQUÍA DE HORA:
+                1. 'HORA_INT' (HH:MM).
+                2. Si no hay, busca en 'LINK' (patrón de 4 dígitos tras fecha).
+                3. Si no hay, 'META'.
+                4. Si no hay, estima y pon "(aprox.)".
+
+                FORMATO SALIDA:
+                *TITULAR EN MAYÚSCULAS Y NEGRITA*
+                MEDIO EN MAYÚSCULAS Y NEGRITA
+                HH:MM (Solo números)
+                Resumen de 4 a 6 líneas.
+                URL
+
+                ENTRADA:
+                {raw_data}
                 """
-                st.markdown(html_final, unsafe_allow_html=True)
-                st.success("Monitoreo generado siguiendo el orden de fuentes y jerarquía de horas.")
+                
+                with st.spinner("IA procesando..."):
+                    res = model.generate_content(prompt)
+                
+                if res.text:
+                    st.subheader("📋 Resultado Final:")
+                    processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                    st.markdown(f'<div style="font-family:serif; font-size:13px; text-align:justify; background:white; color:black; padding:20px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+            
+            except Exception as e:
+                st.error(f"Error en la comunicación con Gemini: {str(e)}")
+        else:
+            st.warning("No se obtuvo suficiente información de los medios.")
