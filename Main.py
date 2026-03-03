@@ -38,9 +38,9 @@ def extraer_noticias():
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/", "base": "https://www.reduno.com.bo"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/", "base": "https://www.atb.com.bo"},
         {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/principal/", "base": "https://www.boliviatv.bo"},
-        {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/", "base": "https://www.urgente.bo"},
         {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/", "base": "https://www.redbolivision.tv.bo"},
         {"nombre": "CADENA A", "url": "https://www.cadenaa.tv/", "base": "https://www.cadenaa.tv"},
+        {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/", "base": "https://www.urgente.bo"},
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
@@ -119,6 +119,7 @@ if api_key:
                     FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
                     PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA, NO TOMAR EN CUENTA DEPORTES, INTERNACIONAL NI FARÁNDULA
                     PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA
+                    PRIORIDAD DE MEDIOS: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, MEDIOS DIGITALES
                     ENTRADA: {noticias_raw}
 
                     ORDEN DE SALIDA PARA CADA NOTICIA (ESTRICTO):
