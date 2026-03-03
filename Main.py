@@ -31,58 +31,54 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_noticias():
     fuentes = [
-        {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/", "base": "https://www.opinion.com.bo"},
-        {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/", "base": "https://www.lostiempos.com"},
-        {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/", "base": "https://lavozdetarija.com"},
+        {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/section/pais", "base": "https://www.opinion.com.bo"},
+        {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/actualidad/economia", "base": "https://www.lostiempos.com"},
+        {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/category/bolivia/", "base": "https://lavozdetarija.com"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/economia/", "base": "https://unitel.bo"},
-        {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/", "base": "https://www.reduno.com.bo"},
+        {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/noticias", "base": "https://www.redbolivision.tv.bo"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/", "base": "https://www.atb.com.bo"},
-        {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/principal/", "base": "https://www.boliviatv.bo"},
-        {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/", "base": "https://www.redbolivision.tv.bo"},
-        {"nombre": "CADENA A", "url": "https://www.cadenaa.tv/", "base": "https://www.cadenaa.tv"},
+        {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/principal/noticias", "base": "https://www.boliviatv.bo"},
         {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/", "base": "https://www.urgente.bo"},
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/", "base": "https://innoticiasbo.com"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    
+    # Headers más robustos para evitar bloqueos
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    }
+    
     data_raw = ""
     pb = st.progress(0)
     
     for i, fuente in enumerate(fuentes):
         pb.progress((i + 1) / len(fuentes))
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=12)
+            # Aumentamos el timeout y usamos una sesión para manejar cookies
+            session = requests.Session()
+            r = session.get(fuente['url'], headers=headers, timeout=15)
+            r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
-            
-            # --- BÚSQUEDA DE HORA EN METADATOS DE LA PÁGINA PRINCIPAL ---
-            # Muchos sitios ponen la hora en etiquetas ocultas tipo 'article:published_time'
-            meta_date = ""
-            meta_tag = soup.find("meta", property="article:published_time") or \
-                       soup.find("meta", itemprop="datePublished") or \
-                       soup.find("meta", name="publish-date")
-            if meta_tag:
-                meta_date = meta_tag.get("content", "")
 
-            limite = 10 if hora_actual >= 12 else 20
-            for tag in soup.find_all(['h1', 'h2', 'h3'], limit=limite):
-                titulo = tag.get_text().strip()
-                a_tag = tag.find('a') or tag.find_parent('a')
+            # Buscamos noticias en diversas etiquetas comunes
+            articulos = soup.find_all(['h1', 'h2', 'h3', 'article'], limit=25)
+            
+            for art in articulos:
+                a_tag = art.find('a') if art.name != 'a' else art
+                titulo = art.get_text().strip()
                 
-                if a_tag and a_tag.get('href') and len(titulo) > 30:
+                if a_tag and a_tag.get('href') and len(titulo) > 25:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     
-                    # Intentar capturar hora visual cerca del titular
-                    time_info = ""
-                    parent = tag.parent
-                    time_tag = parent.find('time') or parent.find(class_=re.compile('date|time|fecha', re.I))
-                    if time_tag:
-                        time_info = time_tag.get_text().strip()
-                    else:
-                        time_info = meta_date # Usar la de los metadatos si no hay visual
+                    # Intentar extraer fecha/hora del texto del contenedor o del propio link (algunos links llevan la fecha)
+                    contexto_txt = art.parent.get_text()[:200] # Tomamos un poco de texto alrededor
                     
-                    data_raw += f"MEDIO: {fuente['nombre']} | HORA_METADATO: {time_info} | TEMA: {titulo} | LINK: {full_link}\n"
-        except: continue
+                    data_raw += f"MEDIO: {fuente['nombre']} | CONTEXTO: {contexto_txt} | TEMA: {titulo} | LINK: {full_link}\n"
+        except Exception as e:
+            continue
+            
     pb.empty()
     return data_raw
 
@@ -92,16 +88,9 @@ if api_key:
     if st.button('🚀 GENERAR MONITOREO'):
         modelo_valido = None
         try:
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    if 'gemini-1.5-flash' in m.name:
-                        modelo_valido = m.name
-                        break
-            if not modelo_valido:
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        modelo_valido = m.name
-                        break
+            # Lista de modelos para asegurar compatibilidad
+            modelos_compatibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            modelo_valido = next((m for m in modelos_compatibles if "1.5-flash" in m), modelos_compatibles[0])
         except: pass
 
         if modelo_valido:
@@ -109,27 +98,28 @@ if api_key:
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ IA analizando noticias y metadatos...")
+                    status_ia.text(f"⚖️ IA analizando noticias de múltiples medios...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
                     FECHA DEL REPORTE: {fecha_ref}.
                     {prompt_regla}
-                    TAREA: Resumen técnico informativo. 
-                    FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
-                    PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA, NO TOMAR EN CUENTA DEPORTES, INTERNACIONAL NI FARÁNDULA
-                    PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA
-                    PRIORIDAD DE MEDIOS: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, TV, MEDIOS DIGITALES
+                    
+                    TAREA: Resumen técnico para monitoreo de prensa.
+                    
+                    PRIORIDAD: 1. Economía e Impuestos, 2. Govierno, 3. Cochabamba y Tarija. 4. Orden de medios: Opinión, Los Tiempos, La Voz de Tarija, TV, medios digitales.
+                    REGLA CRÍTICA DE HORA: Revisa el campo 'CONTEXTO' y el 'LINK' para encontrar la hora. Si el link dice algo como '/2024/03/02/14-30/', la hora es 14:30. Si no hay nada, estima una hora lógica de hoy lunes entre las 07:00 y las {ahora.strftime('%H:%M')}. No pongas "Hora no disponible", asume una hora basada en la frescura.
+
                     ENTRADA: {noticias_raw}
 
-                    ORDEN DE SALIDA PARA CADA NOTICIA (ESTRICTO):
-                    *TITULAR EN MAYÚSCULAS Y NEGRITA* (con un asterisco al inicio y otro al final)
+                    ORDEN DE SALIDA (ESTRICTO):
+                    *TITULAR EN MAYÚSCULAS Y NEGRITA* (con un asterisco al principio y otro al final)
                     MEDIO EN MAYÚSCULAS Y NEGRITA
-                    Hora de publicación (Solo la hora, sin etiquetas como 'Hora:' ni nada parecido. Si es un formato largo de metadato, límpialo para que solo quede HH:MM).
+                    HH:MM (Solo la hora, sin etiquetas)
                     Párrafo informativo (4 a 6 líneas).
                     URL (en minúsculas).
-                    
-                    (Deja exactamente un salto de línea entre noticias. Confirma nombres y cargos).
+
+                    (Exactamente un salto de línea entre noticias. Sin asteriscos de markdown excepto en el titular).
                     """
                     
                     response = model.generate_content(prompt)
@@ -138,9 +128,8 @@ if api_key:
                     if response.text:
                         st.subheader("📋 Formato Times New Roman 10 (Listo para copiar):")
                         
-                        # Convertir negritas de Markdown a HTML
+                        # Limpieza de negritas Markdown a HTML
                         processed_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text)
-                        # Convertir saltos de línea a HTML
                         html_content = processed_text.replace("\n", "<br>")
                         
                         styled_html = f"""
@@ -157,10 +146,9 @@ if api_key:
                             {html_content}
                         </div>
                         """
-                        
                         st.markdown(styled_html, unsafe_allow_html=True)
-                        st.success("Copia el texto del recuadro superior.")
+                        st.success("Monitoreo generado con éxito.")
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error en la IA: {e}")
             else:
-                st.error("No se capturaron noticias suficientes.")
+                st.error("Los medios bloquearon la conexión o no hay noticias nuevas. Intenta de nuevo.")
