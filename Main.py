@@ -20,46 +20,37 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
     texto = soup.get_text(" ", strip=True)
-    
-    # 1. OPINIÓN: Ignorar reloj de cabecera
+    # 1. OPINIÓN: Ignorar cabecera
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
             m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
             if m: return m.group(1)
-
     # 2. LOS TIEMPOS: 13h55 -> 13:55
     if medio == "LOS TIEMPOS":
         m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
-
-    # 5. UNITEL: Tiempo relativo
+    # 5. UNITEL: Relativo
     if medio == "UNITEL":
         m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto.lower())
         if m_rel:
             cant = int(m_rel.group(1))
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
-
-    # 4, 11, 12. Metadatos LD+JSON
+    # Metadatos
     if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
                 data = json.loads(s.string)
-                items = data if isinstance(data, list) else [data]
-                for item in items:
-                    graph = item.get('@graph', [item])
-                    for node in graph:
-                        date_str = node.get('datePublished', '')
-                        m = re.search(r'(\d{2}:\d{2})', str(date_str))
-                        if m: return m.group(1)
+                node = data.get('@graph', [data])[0] if isinstance(data, dict) else data[0]
+                date_str = node.get('datePublished', '')
+                m = re.search(r'(\d{2}:\d{2})', str(date_str))
+                if m: return m.group(1)
             except: continue
-
-    # 3, 6, 7, 8, 10. Búsqueda directa en artículo
+    # General
     matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
-        if m != ahora.strftime('%H:%M') and m != "04:00":
-            return m
+        if m != ahora.strftime('%H:%M') and m != "04:00": return m
     return ""
 
 def procesar_monitoreo():
@@ -71,78 +62,3 @@ def procesar_monitoreo():
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
         {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/"},
-        {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/"},
-        {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/"},
-        {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/"},
-        {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
-    ]
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36'}
-    data_final = ""
-    pb = st.progress(0)
-    
-    for i, fuente in enumerate(fuentes):
-        st.write(f"📡 Explorando {fuente['nombre']}...")
-        pb.progress((i + 1) / len(fuentes))
-        try:
-            r = requests.get(fuente['url'], headers=headers, timeout=15)
-            soup = BeautifulSoup(r.text, 'html.parser')
-            links = soup.find_all('a', href=True)
-            vistos = set()
-            procesados = 0
-            
-            for l in links:
-                url_n = l['href']
-                if not url_n.startswith('http'):
-                    base = fuente['url'].split('.bo')[0] + '.bo' if '.bo' in fuente['url'] else fuente['url'].rstrip('/')
-                    url_n = base + ('' if url_n.startswith('/') else '/') + url_n
-                
-                if len(l.get_text().strip()) < 30 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/']):
-                    continue
-                
-                try:
-                    rn = requests.get(url_n, headers=headers, timeout=10)
-                    soup_n = BeautifulSoup(rn.text, 'html.parser')
-                    h = extraer_hora_especifica(soup_n, fuente['nombre'])
-                    p_list = soup_n.find_all('p', limit=6)
-                    cuerpo = " ".join([p.get_text().strip() for p in p_list if len(p.get_text()) > 25])
-                    
-                    if len(cuerpo) > 120:
-                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {l.get_text().strip()} | LINK: {url_n} | TXT: {cuerpo[:800]}\n\n"
-                        vistos.add(url_n)
-                        procesados += 1
-                except: continue
-                if procesados >= 5: break
-        except: continue
-    return data_final
-
-if api_key:
-    genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR REPORTE'):
-        raw_data = procesar_monitoreo()
-        if len(raw_data) > 300:
-            try:
-                # USANDO EL MODELO 2.0 FLASH DISPONIBLE EN TU CUENTA
-                model = genai.GenerativeModel('models/gemini-2.0-flash')
-                
-                prompt = f"""
-                HOY ES: {fecha_hoy_bonita}.
-                INSTRUCCIONES:
-                1. Solo Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
-                2. ELIMINA Deportes, Farándula, Policiales e Internacional.
-                3. Usa el campo 'HORA'. Si está vacío, estima una de hoy y pon "(aprox.)".
-                4. NO AGRUPES POR MEDIO. Lista continua.
-                
-                FORMATO POR NOTICIA:
-                *TITULAR EN MAYÚSCULAS Y NEGRITA*
-                MEDIO EN MAYÚSCULAS Y NEGRITA
-                HH:MM
-                Resumen de 4 a 6 líneas detallado.
-                URL
-                """
-                
-                res = model.generate_content([prompt, raw_data])
-                st.subheader("📋 Resumen Informativo:")
-                processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
-                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"Error con Gemini 2.0: {str(e)}")
