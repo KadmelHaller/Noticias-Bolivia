@@ -52,13 +52,22 @@ def extraer_noticias():
             r = requests.get(fuente['url'], headers=headers, timeout=10)
             soup = BeautifulSoup(r.text, 'html.parser')
             limite = 10 if hora_actual >= 12 else 20
+            
+            # Buscamos artículos o bloques que contengan título y posiblemente fecha
             for tag in soup.find_all(['h1', 'h2', 'h3'], limit=limite):
                 titulo = tag.get_text().strip()
                 a_tag = tag.find('a') or tag.find_parent('a')
+                
                 if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
-                    data_raw += f"MEDIO: {fuente['nombre']} | TEMA: {titulo} | LINK: {full_link}\n"
+                    
+                    # Intentar buscar una marca de tiempo cercana al título
+                    parent = tag.parent
+                    time_tag = parent.find('time') or parent.find(class_=['date', 'time', 'fecha'])
+                    hora_nota = time_tag.get_text().strip() if time_tag else "Hora no disponible"
+                    
+                    data_raw += f"MEDIO: {fuente['nombre']} | HORA/FECHA: {hora_nota} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
     pb.empty()
     return data_raw
@@ -94,46 +103,51 @@ if api_key:
                     {prompt_regla}
                     TAREA: Resumen técnico informativo. 
                     FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
-                    PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA, NO TOMAR EN CUENTA DEPORTES, INTERNACIONAL NI FARÁNDULA
-                    PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA
+                    PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA. NO DEPORTES, NO FARÁNDULA.
+                    PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA.
                     ENTRADA: {noticias_raw}
 
-                    ORDEN DE SALIDA:
-                    TITULAR (MAYÚSCULAS, NEGRITA, UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
+                    ORDEN DE SALIDA PARA CADA NOTICIA:
+                    *TITULAR (MAYÚSCULAS Y NEGRITA, con un asterisco al principio y otro al final)*
                     MEDIO (MAYÚSCULAS Y NEGRITA)
+                    HORA DE PUBLICACIÓN: (Indica la hora que aparece en la entrada, si no existe o dice 'no disponible', intenta deducirla o simplemente no pongas la línea).
                     Párrafo informativo de entre 4 y 6 líneas.
                     URL
-                    (Deja exactamente un salto de línea entre cada noticia, confirma al 100% los nombres y cargos de las personas que aparecen en las noticias).
+                    
+                    (Deja exactamente un salto de línea entre cada noticia. Confirma nombres y cargos).
                     """
                     
                     response = model.generate_content(prompt)
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("📋 Resultado (Selecciona y copia el texto de abajo):")
+                        st.subheader("📋 Resultado (Formato Times New Roman 10):")
                         
-                        # CREACIÓN DEL CONTENEDOR HTML CON ESTILO TIMES NEW ROMAN 10
-                        # Reemplazamos los saltos de línea por <br> para que el HTML los respete
-                        html_content = response.text.replace("\n", "<br>")
+                        # Procesar negritas de Markdown (**) a HTML (<b>) para que se mantengan al copiar
+                        import re
+                        processed_text = response.text
+                        processed_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', processed_text)
+                        
+                        # Convertir saltos de línea a <br>
+                        html_content = processed_text.replace("\n", "<br>")
                         
                         styled_html = f"""
                         <div style="
                             font-family: 'Times New Roman', Times, serif; 
-                            font-size: 10px; 
+                            font-size: 13.3px; 
                             color: black; 
                             background-color: white; 
                             padding: 20px; 
                             border: 1px solid #ccc;
                             line-height: 1.2;
+                            text-align: justify;
                         ">
                             {html_content}
                         </div>
                         """
                         
-                        # Renderizamos el HTML en Streamlit
                         st.markdown(styled_html, unsafe_allow_html=True)
-                        
-                        st.success("Éxito")
+                        st.success("Copiado exitoso: El formato visual es Times New Roman (aprox. tamaño 10).")
                 except Exception as e:
                     st.error(f"Error: {e}")
             else:
