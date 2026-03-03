@@ -14,12 +14,12 @@ ahora = datetime.now(zona_horaria)
 fecha_ref = ahora.strftime('%d/%m/%Y')
 
 st.title(f"📰 MONITOREO DE NOTICIAS: {fecha_ref}")
-st.info(f"Prioridad de hora: Texto del artículo > URL > Metadatos")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_url(url):
-    # Patrón: busca 4 dígitos de hora después de una fecha 2024-2026
+    """Busca patrones de hora HHMM o HH-MM en la URL."""
+    # Caso Red Uno y otros (patrones de 4 dígitos al final de la fecha)
     match = re.search(r'202[4-6]\d{2,4}(\d{2})(\d{2})', url)
     if match:
         return f"{match.group(1)}:{match.group(2)}"
@@ -52,38 +52,36 @@ def extraer_noticias():
             r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
             
-            # Meta global (Nivel 3)
-            meta_global = soup.find("meta", property="article:published_time")
-            meta_txt = meta_global.get("content", "") if meta_global else ""
-
-            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=15)
+            # Buscamos artículos
+            articulos = soup.find_all(['h1', 'h2', 'h3', 'article'], limit=20)
             
             for art in articulos:
                 titulo = art.get_text().strip()
-                a_tag = art.find('a') or art.find_parent('a')
+                a_tag = art.find('a') if art.name != 'a' else art
+                if not a_tag: a_tag = art.find_parent('a')
                 
                 if a_tag and a_tag.get('href') and len(titulo) > 30:
                     link = a_tag['href']
                     full_link = link if link.startswith('http') else fuente['base'].rstrip('/') + link
                     
-                    # --- JERARQUÍA DE HORA ---
-                    hora_encontrada = ""
-                    
-                    # 1. Buscar en el texto/etiquetas del artículo (Nivel 1)
+                    # --- EXTRACCIÓN DE HORA MULTINIVEL ---
+                    # 1. Buscar etiquetas HTML de tiempo cerca del título
+                    info_tiempo = ""
                     contenedor = art.parent
-                    tag_tiempo = contenedor.find(['time', 'span', 'div'], class_=re.compile(r'time|date|hora|fecha', re.I))
-                    if tag_tiempo:
-                        hora_encontrada = tag_tiempo.get_text().strip()
+                    tag_t = contenedor.find(['time', 'span', 'div'], class_=re.compile(r'time|date|hora|fecha|entry-meta', re.I))
+                    if tag_t:
+                        info_tiempo = tag_t.get_text().strip()
                     
-                    # 2. Si no hay, buscar en la URL (Nivel 2)
-                    if not hora_encontrada or len(hora_encontrada) < 3:
-                        hora_encontrada = extraer_hora_url(full_link)
+                    # 2. Buscar en la URL (Red Uno style)
+                    if not info_tiempo:
+                        info_tiempo = extraer_hora_url(full_link)
                     
-                    # 3. Si sigue sin haber, usar metadatos (Nivel 3)
-                    if not hora_encontrada:
-                        hora_encontrada = meta_txt
+                    # 3. Metadatos específicos del artículo (si están en la home)
+                    if not info_tiempo:
+                        meta_t = art.find_next("meta", property="article:published_time")
+                        if meta_t: info_tiempo = meta_t.get("content", "")
 
-                    data_raw += f"SITIO: {fuente['nombre']} | HORA_DATA: {hora_encontrada} | TEMA: {titulo} | LINK: {full_link}\n"
+                    data_raw += f"MEDIO: {fuente['nombre']} | DATO_TIEMPO: {info_tiempo} | TEMA: {titulo} | LINK: {full_link}\n"
         except: continue
     pb.empty()
     return data_raw
@@ -103,23 +101,22 @@ if api_key:
             if len(noticias_raw) > 300:
                 status_ia = st.empty()
                 try:
-                    status_ia.text(f"⚖️ Verificando jerarquía de horas...")
+                    status_ia.text(f"⚖️ Analizando noticias del día...")
                     model = genai.GenerativeModel(modelo_valido)
                     
                     prompt = f"""
-                    FECHA ACTUAL: {fecha_ref}. HORA ACTUAL: {ahora.strftime('%H:%M')}.
+                    HOY ES: {fecha_ref}. HORA ACTUAL EN BOLIVIA: {ahora.strftime('%H:%M')}.
                     
-                    INSTRUCCIONES PARA LA HORA:
-                    El campo 'HORA_DATA' contiene la información recolectada.
-                    1. Si 'HORA_DATA' contiene una hora clara (HH:MM), ÚSALA.
-                    2. Si 'HORA_DATA' es una fecha larga o metadato, extrae solo la hora.
-                    3. Si no es clara, búscala en el texto del 'LINK'.
-                    4. Si no hay rastro en ninguno, pon una hora estimada de hoy y añade "(aprox.)".
+                    INSTRUCCIONES CRÍTICAS PARA LA HORA:
+                    1. Revisa el campo 'DATO_TIEMPO'. Si contiene una hora (ej. 10:59, 13:10), esa es la HORA REAL. ÚSALA.
+                    2. Si 'DATO_TIEMPO' está vacío, busca la hora en el texto del 'LINK'.
+                    3. Si después de buscar no hay rastro, pon una hora estimada lógica de hoy (antes de las {ahora.strftime('%H:%M')}) seguida de "(aprox.)".
+                    4. IMPORTANTE: No inventes la hora 15:30 para todo. Si la noticia parece antigua o de la mañana, estima una hora matutina.
 
                     ORDEN DE SALIDA:
                     *TITULAR EN MAYÚSCULAS Y NEGRITA*
                     MEDIO EN MAYÚSCULAS Y NEGRITA
-                    HH:MM (Solo los números, sin palabras adicionales)
+                    HH:MM (Solo la hora)
                     Párrafo informativo (4 a 6 líneas).
                     URL
 
@@ -131,7 +128,7 @@ if api_key:
                     status_ia.empty()
                     
                     if response.text:
-                        st.subheader("📋 Resultado Jerarquizado (Times New Roman 10):")
+                        st.subheader("📋 Resultado (Times New Roman 10):")
                         processed_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text)
                         html_content = processed_text.replace("\n", "<br>")
                         
@@ -141,6 +138,6 @@ if api_key:
                         </div>
                         """
                         st.markdown(styled_html, unsafe_allow_html=True)
-                        st.success("Copia el texto de arriba para tu informe.")
+                        st.success("Monitoreo generado.")
                 except Exception as e:
                     st.error(f"Error: {e}")
