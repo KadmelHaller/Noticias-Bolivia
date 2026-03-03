@@ -18,7 +18,23 @@ st.title(f"📰 MONITOREO FINAL: {fecha_ref}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
+def calcular_hora_relativa(texto):
+    texto = texto.lower()
+    try:
+        match = re.search(r'(\d+)\s+(minuto|hora)', texto)
+        if match:
+            cantidad = int(match.group(1))
+            unidad = match.group(2)
+            dt = ahora - (timedelta(minutes=cantidad) if 'minuto' in unidad else timedelta(hours=cantidad))
+            return dt.strftime('%H:%M')
+    except: pass
+    return None
+
 def extraer_datos_articulo(url, headers):
+    # Evitar links basura de navegación
+    if any(x in url.lower() for x in ['/category/', '/tag/', '/author/', '/page/', '/seccion/']):
+        return None, None
+
     try:
         r = requests.get(url, headers=headers, timeout=10)
         r.encoding = 'utf-8'
@@ -26,8 +42,7 @@ def extraer_datos_articulo(url, headers):
         
         hora_final = ""
 
-        # --- NIVEL 1: METADATOS TÉCNICOS (La Voz de Tarija, Opinión, etc.) ---
-        # Buscamos en JSON-LD el campo datePublished
+        # 1. NIVEL 1: JSON-LD (Metadatos técnicos)
         scripts = soup.find_all('script', type='application/ld+json')
         for script in scripts:
             try:
@@ -37,49 +52,35 @@ def extraer_datos_articulo(url, headers):
                     graph = item.get('@graph', [item])
                     for node in graph:
                         if 'datePublished' in node:
-                            raw_date = node['datePublished'] # Ejemplo: 2026-03-03T11:08:45+00:00
+                            raw_date = node['datePublished']
                             match = re.search(r'(\d{2}):(\d{2})', raw_date)
                             if match:
                                 hh, mm = int(match.group(1)), match.group(2)
-                                # Ajuste de UTC a BOT (Bolivia Time -4) si detectamos Z o +00
+                                # Solo ajustar si es explícitamente UTC y la hora resultaría lógica
                                 if 'Z' in raw_date or '+00' in raw_date:
                                     hh = (hh - 4) % 24
-                                hora_final = f"{hh:02d}:{mm}"
-                                break
-                    if hora_final: break
+                                if not (hh == 4 and mm == "00"): # Evitar el bug del 04:00
+                                    hora_final = f"{hh:02d}:{mm}"
+                                    break
             except: continue
             if hora_final: break
 
-        # --- NIVEL 2: TIEMPO RELATIVO (Unitel) ---
+        # 2. NIVEL 2: TIEMPO RELATIVO (Fundamental para UNITEL)
         if not hora_final:
-            texto_completo = soup.get_text().lower()
-            # Buscamos patrones como "hace 5 minutos" o "hace 1 hora"
-            rel_match = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto_completo)
-            if rel_match:
-                cantidad = int(rel_match.group(1))
-                unidad = rel_match.group(2)
-                if 'minuto' in unidad:
-                    dt = ahora - timedelta(minutes=cantidad)
-                else:
-                    dt = ahora - timedelta(hours=cantidad)
-                hora_final = dt.strftime('%H:%M')
+            for tag in soup.find_all(['span', 'div', 'time']):
+                rel = calcular_hora_relativa(tag.get_text())
+                if rel:
+                    hora_final = rel
+                    break
 
-        # --- NIVEL 3: ETIQUETAS HTML VISIBLES ---
-        if not hora_final:
-            tag_t = soup.find(['time']) or soup.find(class_=re.compile(r'entry-date|published|fecha', re.I))
-            if tag_t:
-                content = tag_t.get('content') or tag_t.get_text()
-                match = re.search(r'(\d{2}):(\d{2})', str(content))
-                if match:
-                    hora_final = match.group(0)
-
-        # EXTRAER TEXTO
+        # 3. EXTRAER CONTENIDO
         parrafos = soup.find_all('p', limit=5)
         contenido = " ".join([p.get_text().strip() for p in parrafos])
+        if len(contenido) < 200: return None, None # Ignorar páginas vacías o de error
         
         return hora_final, contenido
     except:
-        return "", ""
+        return None, None
 
 def extraer_noticias():
     fuentes = [
@@ -97,16 +98,17 @@ def extraer_noticias():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/", "base": "https://enfoquenews.com.bo"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    # User-Agent más "humano" para evitar bloqueos de Los Tiempos
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
     data_raw = ""
     pb = st.progress(0)
     
     for i, fuente in enumerate(fuentes):
         pb.progress((i + 1) / len(fuentes))
         try:
-            r = requests.get(fuente['url'], headers=headers, timeout=10)
+            r = requests.get(fuente['url'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
-            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=8)
+            articulos = soup.find_all(['h1', 'h2', 'h3'], limit=10)
             
             for art in articulos:
                 a_tag = art.find('a') or art.find_parent('a')
@@ -114,33 +116,32 @@ def extraer_noticias():
                     full_link = a_tag['href'] if a_tag['href'].startswith('http') else fuente['base'].rstrip('/') + a_tag['href']
                     h_real, txt = extraer_datos_articulo(full_link, headers)
                     
-                    if len(txt) > 150:
-                        data_raw += f"ORDEN: {i+1} | MEDIO: {fuente['nombre']} | HORA_REAL: {h_real} | LINK: {full_link} | TXT: {txt[:700]}\n"
+                    if txt:
+                        data_raw += f"ID_MEDIO: {i+1} | MEDIO: {fuente['nombre']} | HORA_DOC: {h_real} | LINK: {full_link} | TEXTO: {txt[:700]}\n"
         except: continue
     return data_raw
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR MONITOREO'):
+    if st.button('🚀 GENERAR MONITOREO LIMPIO'):
         raw_data = extraer_noticias()
         if len(raw_data) > 300:
             modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            modelo_final = next((m for m in modelos if "1.5-flash" in m), modelos[0])
-            model = genai.GenerativeModel(modelo_final)
+            model = genai.GenerativeModel(next((m for m in modelos if "1.5-flash" in m), modelos[0]))
             
             prompt = f"""
             HOY ES: {fecha_ref}. HORA ACTUAL BOLIVIA: {ahora.strftime('%H:%M')}.
-            TAREA: Monitoreo técnico de prensa.
-            FILTRADO ESTRICTO: ELIMINA Deportes, Farándula e Internacional.
-            PRIORIZA: Economía, Impuestos, Gobierno de Cochabamba y Tarija.
-            ORDENA: Según 'ORDEN' (1 al 12).
+            
+            REGLAS:
+            1. FILTRADO: ELIMINA Deportes, Farándula, Internacional y páginas de error/portada.
+            2. PRIORIZA: Economía, Gobierno, Cochabamba y Tarija.
+            3. ORDEN: Agrupa por 'MEDIO' siguiendo el orden de 'ID_MEDIO' (1 al 12). No escribas "ORDEN: ##" en el resultado.
+            
+            REGLA DE HORA:
+            - Usa 'HORA_DOC'. Si es "04:00" y la noticia es reciente, ignórala y pon la hora actual aprox. o busca en el LINK.
+            - Si no hay hora, pon una hora lógica de hoy y añade "(aprox.)".
 
-            REGLA DE HORA (CRÍTICA):
-            1. Si 'HORA_REAL' tiene un valor HH:MM, ÚSALO SIN CAMBIOS. Es el dato extraído del código fuente.
-            2. Si 'HORA_REAL' está vacío, busca la hora en el 'LINK' (ej. 1310).
-            3. Solo si no hay rastro, estima y pon "(aprox.)".
-
-            FORMATO:
+            FORMATO DE SALIDA (ESTRICTO):
             *TITULAR EN MAYÚSCULAS Y NEGRITA*
             MEDIO EN MAYÚSCULAS Y NEGRITA
             HH:MM
@@ -151,6 +152,6 @@ if api_key:
             """
             res = model.generate_content(prompt)
             if res.text:
-                st.subheader("📋 Resultado Final:")
+                st.subheader("📋 Informe Final:")
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                 st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:20px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
