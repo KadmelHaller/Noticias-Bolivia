@@ -94,13 +94,13 @@ if api_key:
                     {prompt_regla}
                     TAREA: Resumen técnico informativo. 
                     FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
-                    PRIORIDAD NOTICIOSA: ECONOMÍA, IMPUESTOS, GOBIERNO
+                    PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA, NO TOMAR EN CUENTA DEPORTES, INTERNACIONAL NI FARÁNDULA
                     PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA
                     ENTRADA: {noticias_raw}
 
                     ORDEN DE SALIDA:
-                    TITULAR (MAYÚSCULAS, BOLD Y UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
-                    MEDIO (MAYÚSCULAS Y BOLD)
+                    TITULAR (MAYÚSCULAS, NEGRITA, UN ASTERISCO AL PRINCIPIO Y OTRO ASTERISCO AL FINAL DEL TITULAR)
+                    MEDIO (MAYÚSCULAS Y NEGRITA)
                     Párrafo informativo de entre 4 y 6 líneas.
                     URL
                     (Deja exactamente un salto de línea entre cada noticia, confirma al 100% los nombres y cargos de las personas que aparecen en las noticias).
