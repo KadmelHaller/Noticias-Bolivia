@@ -20,24 +20,20 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
     texto = soup.get_text(" ", strip=True)
-    
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
             m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
             if m: return m.group(1)
-
     if medio == "LOS TIEMPOS":
         m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
-
     if medio == "UNITEL":
         m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto.lower())
         if m_rel:
             cant = int(m_rel.group(1))
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
-
     if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
@@ -50,7 +46,6 @@ def extraer_hora_especifica(soup, medio):
                         m = re.search(r'(\d{2}:\d{2})', str(date_str))
                         if m: return m.group(1)
             except: continue
-
     matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
         if m != ahora.strftime('%H:%M') and m != "04:00":
@@ -71,30 +66,26 @@ def procesar_monitoreo():
         {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/"},
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
     ]
-    
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36'}
     data_final = ""
     pb = st.progress(0)
-    
     for i, fuente in enumerate(fuentes):
         st.write(f"📡 Explorando {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=15)
             soup = BeautifulSoup(r.text, 'html.parser')
-            links = soup.select('article a[href]') if fuente['nombre'] == "LA VOZ DE TARIJA" else soup.find_all('a', href=True)
-
-            procesados = 0
+            # Ajuste Tarija: Buscar en todas las etiquetas de link
+            links = soup.find_all('a', href=True)
             vistos = set()
+            procesados = 0
             for l in links:
                 url_n = l['href']
                 if not url_n.startswith('http'):
                     base = fuente['url'].split('.bo')[0] + '.bo' if '.bo' in fuente['url'] else fuente['url'].rstrip('/')
                     url_n = base + ('' if url_n.startswith('/') else '/') + url_n
-                
                 if len(l.get_text().strip()) < 30 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/']):
                     continue
-                
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
@@ -114,26 +105,26 @@ if api_key:
     if st.button('🚀 GENERAR REPORTE'):
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
-            # --- DETECCIÓN DINÁMICA DE MODELO ---
+            # --- SELECCIÓN DE MODELO A PRUEBA DE ERRORES ---
             try:
-                modelos_visibles = genai.list_models()
-                nombre_modelo = next(m.name for m in modelos_visibles if '1.5-flash' in m.name)
-                model = genai.GenerativeModel(nombre_modelo)
-            except:
-                model = genai.GenerativeModel('gemini-1.5-flash-latest') # Fallback
-            
-            prompt = f"""
-            HOY ES: {fecha_hoy_bonita}.
-            FILTRO: Solo Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
-            ELIMINA: Deportes, Farándula, Policiales e Internacional.
-            HORA: Usa 'HORA'. Si no hay, pon una de hoy con "(aprox.)".
-            FORMATO: Lista continua, *TITULAR*, MEDIO, HH:MM, Resumen (4-6 líneas), URL.
-            """
-            
-            try:
+                # Intentamos la forma más simple posible
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                prompt = f"""
+                HOY ES: {fecha_hoy_bonita}.
+                FILTRO: Solo Economía, Gobierno, Aduana, Impuestos y Gestión Municipal.
+                ELIMINA: Deportes, Farándula, Policiales e Internacional.
+                HORA: Usa 'HORA'. Si no hay, pon una de hoy con "(aprox.)".
+                FORMATO: Lista continua, *TITULAR*, MEDIO, HH:MM, Resumen (4-6 líneas), URL.
+                """
+                
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resultado:")
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                 st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+            
             except Exception as e:
-                st.error(f"Error de Generación: {str(e)}")
+                st.error(f"Error detectado: {str(e)}")
+                st.write("Buscando modelos alternativos en tu cuenta...")
+                modelos = [m.name for m in genai.list_models()]
+                st.write("Modelos disponibles:", modelos)
