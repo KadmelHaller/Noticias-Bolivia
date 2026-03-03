@@ -21,29 +21,28 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_datos_articulo(url, headers):
     try:
-        # Reintento para sitios difíciles
-        for _ in range(2):
-            r = requests.get(url, headers=headers, timeout=12)
-            if r.status_code == 200: break
-            time.sleep(1)
-            
+        # Reintento para estabilidad
+        r = requests.get(url, headers=headers, timeout=15)
         r.encoding = 'utf-8'
         soup = BeautifulSoup(r.text, 'html.parser')
         
         hora_detectada = ""
 
-        # ESTRATEGIA 1: Buscar texto con formato HH:MM en el cuerpo (Muy efectivo para Opinión/Tarija)
-        # Buscamos en las primeras etiquetas de la nota
-        elementos_fecha = soup.find_all(['span', 'div', 'time', 'p'], limit=15)
-        for el in elementos_fecha:
-            txt = el.get_text().strip()
-            # Patrón de hora: 10:59, 11:08, etc.
-            match = re.search(r'(\d{1,2}:\d{2})', txt)
-            if match:
-                hora_detectada = match.group(1)
-                break
+        # 1. PATRÓN LOS TIEMPOS (##h##) Y ESTÁNDAR (##:##)
+        texto_pagina = soup.get_text()
+        
+        # Primero buscamos el formato de Los Tiempos: 13h55
+        match_lt = re.search(r'(\d{1,2})h(\d{2})', texto_pagina)
+        if match_lt:
+            hora_detectada = f"{match_lt.group(1)}:{match_lt.group(2)}"
+        
+        # Si no, buscamos formato estándar 13:55
+        if not hora_detectada:
+            match_std = re.search(r'(\d{1,2}:\d{2})', texto_pagina)
+            if match_std:
+                hora_detectada = match_std.group(1)
 
-        # ESTRATEGIA 2: JSON-LD (Si la 1 falla)
+        # 2. JSON-LD (Respaldo técnico)
         if not hora_detectada:
             scripts = soup.find_all('script', type='application/ld+json')
             for script in scripts:
@@ -51,8 +50,8 @@ def extraer_datos_articulo(url, headers):
                     data = json.loads(script.string)
                     items = data if isinstance(data, list) else [data]
                     for item in items:
-                        target = item.get('@graph', [item])
-                        for node in target:
+                        graph = item.get('@graph', [item])
+                        for node in graph:
                             if 'datePublished' in node:
                                 m = re.search(r'(\d{2}:\d{2})', str(node['datePublished']))
                                 if m: 
@@ -60,18 +59,10 @@ def extraer_datos_articulo(url, headers):
                                     break
                 except: continue
 
-        # ESTRATEGIA 3: Tiempo relativo
-        if not hora_detectada:
-            rel_match = re.search(r'hace\s+(\d+)\s+(minuto|hora)', soup.get_text().lower())
-            if rel_match:
-                cant = int(rel_match.group(1))
-                dt = ahora - (timedelta(minutes=cant) if 'min' in rel_match.group(2) else timedelta(hours=cant))
-                hora_detectada = dt.strftime('%H:%M')
-
-        # EXTRAER TEXTO (Bajamos el límite a 100 para que entren notas cortas de Tarija)
+        # EXTRAER TEXTO (Filtro mínimo de 80 caracteres para Tarija)
         parrafos = soup.find_all('p', limit=6)
         contenido = " ".join([p.get_text().strip() for p in parrafos])
-        if len(contenido) < 100: return None, None
+        if len(contenido) < 80: return None, None
         
         return hora_detectada, contenido
     except:
@@ -99,37 +90,40 @@ def extraer_noticias():
     info_st = st.empty()
     
     for i, fuente in enumerate(fuentes):
-        info_st.text(f"Conectando con {fuente['nombre']}...")
+        info_st.text(f"Analizando: {fuente['nombre']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=15)
             soup = BeautifulSoup(r.text, 'html.parser')
-            # Buscamos más links para asegurar que no se pierdan noticias
-            links_encontrados = soup.find_all('a', href=True)
+            
+            # Buscamos artículos específicamente en La Voz de Tarija (usan article)
+            tags_noticias = soup.find_all(['h1', 'h2', 'h3', 'article'], limit=12)
             
             procesados = 0
-            for link in links_encontrados:
-                if procesados >= 8: break # Límite por medio
+            for tag in tags_noticias:
+                if procesados >= 8: break
                 
-                url_n = link['href']
-                if url_n.startswith('/') or fuente['base'] in url_n:
+                a_tag = tag.find('a', href=True) if tag.name != 'a' else tag
+                if a_tag:
+                    url_n = a_tag['href']
                     full_link = url_n if url_n.startswith('http') else fuente['base'].rstrip('/') + url_n
                     
-                    # Filtro básico de URL para evitar secciones
-                    if any(x in full_link for x in ['/category/', '/tag/', '/author/', '/page/']): continue
+                    # Evitar secciones basura
+                    if any(x in full_link.lower() for x in ['/category/', '/tag/', '/author/']): continue
                     
                     h_res, t_res = extraer_datos_articulo(full_link, headers)
                     
-                    if t_res and len(link.get_text()) > 25:
-                        data_raw += f"ID: {i+1} | MEDIO: {fuente['nombre']} | HORA_DOC: {h_res} | TEMA: {link.get_text().strip()} | LINK: {full_link} | TXT: {t_res[:700]}\n"
+                    if t_res:
+                        data_raw += f"ID: {i+1} | MEDIO: {fuente['nombre']} | HORA_DOC: {h_res} | TEMA: {a_tag.get_text().strip()} | LINK: {full_link} | TXT: {t_res[:750]}\n"
                         procesados += 1
         except: continue
+    
     info_st.empty()
     return data_raw
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 EJECUTAR MONITOREO COMPLETO'):
+    if st.button('🚀 EJECUTAR MONITOREO'):
         raw_data = extraer_noticias()
         if len(raw_data) > 300:
             modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -138,21 +132,21 @@ if api_key:
             prompt = f"""
             HOY ES: {fecha_ref}. HORA ACTUAL: {ahora.strftime('%H:%M')}.
             
-            INSTRUCCIONES DE FILTRADO:
-            - SOLO quédate con noticias de Economía, Gobierno, Impuestos o gestión municipal.
-            - ELIMINA TODO lo referente a Deportes, Farándula, Sucesos Policiales menores o Internacional.
+            FILTRADO:
+            - Solo Economía, Gobierno, Impuestos, Aduana o gestión municipal.
+            - ELIMINA Deportes, Farándula e Internacional.
             - PRIORIZA Cochabamba y Tarija.
 
-            INSTRUCCIONES DE HORA:
-            - SI 'HORA_DOC' tiene una hora (ej. 10:59), ÚSALA OBLIGATORIAMENTE. No pongas "(aprox.)" si hay un dato en 'HORA_DOC'.
-            - Si 'HORA_DOC' está vacío, estima la hora basándote en el 'LINK' o el contexto de "noticia de hoy" y pon "(aprox.)".
+            REGLA DE HORA:
+            - Si 'HORA_DOC' tiene un valor (ej. 13:55), USALO SIEMPRE. Es la prioridad.
+            - Solo si está vacío, pon una hora estimada lógica de hoy con "(aprox.)".
 
             FORMATO DE SALIDA:
             Agrupa por MEDIO siguiendo el orden del ID (1 al 12).
             *TITULAR EN MAYÚSCULAS Y NEGRITA*
             MEDIO EN MAYÚSCULAS Y NEGRITA
             HH:MM
-            Resumen informativo detallado (4-6 líneas).
+            Párrafo detallado (4-6 líneas).
             URL
 
             DATOS:
