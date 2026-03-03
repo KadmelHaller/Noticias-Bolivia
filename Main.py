@@ -115,9 +115,10 @@ if api_key:
                     prompt = f"""
                     FECHA DEL REPORTE: {fecha_ref}.
                     {prompt_regla}
-                    PRIORIDAD: ECONOMÍA, IMPUESTOS, GOBIERNO. 
-                    GEOGRAFÍA: COCHABAMBA, TARIJA.
-                    
+                    TAREA: Resumen técnico informativo. 
+                    FORMATO: Solo texto plano, sin asteriscos ni negritas de Markdown.
+                    PRIORIDAD TEMÁTICA: ECONOMÍA, IMPUESTOS, GOBIERNO, LUEGO POLÍTICA, NO TOMAR EN CUENTA DEPORTES, INTERNACIONAL NI FARÁNDULA
+                    PRIORIDAD GEOGRÁFICA: COCHABAMBA, TARIJA
                     ENTRADA: {noticias_raw}
 
                     ORDEN DE SALIDA PARA CADA NOTICIA (ESTRICTO):
