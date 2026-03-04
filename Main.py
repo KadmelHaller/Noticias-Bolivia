@@ -118,13 +118,14 @@ if api_key:
                 
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                REGLAS DE FILTRADO: Economía, Gobierno, Aduana, Impuestos, Gestión Municipal. EXCLUIR TODO LO DEMÁS.
-                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon la hora actual {ahora.strftime('%H:%M')} con "(aprox.)".
+                REGLAS DE FILTRADO: Economía, Gobierno, Impuestos. EXCLUIR TODO LO DEMÁS.
+                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon "Sin hora en datos y metadatos".
+                REGLA DE MEDIOS: PRIORIZA "OPINIÓN", "LOS TIEMPOS" Y "LA VOZ DE TARIJA".
                 
                 ESTRUCTURA OBLIGATORIA (CON SALTOS DE LÍNEA):
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO**
-                HH:MM
+                **Hrs. HH:MM**
                 Resumen detallado de 4 a 6 líneas.
                 URL
                 
