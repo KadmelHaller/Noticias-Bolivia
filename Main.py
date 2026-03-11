@@ -53,12 +53,13 @@ def extraer_hora_especifica(soup, medio):
     return ""
 
 def procesar_monitoreo():
-    # --- ORDEN DE FUENTES SOLICITADO ---
+    # FUENTES ORDENADAS POR PRIORIDAD GEOGRÁFICA
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/category/economia/"},
+        # NUEVA URL PARA LA RAZÓN
+        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/economia/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -69,7 +70,10 @@ def procesar_monitoreo():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'es-ES,es;q=0.9'
+    }
     data_final = ""
     pb = st.progress(0)
     
@@ -78,23 +82,34 @@ def procesar_monitoreo():
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=15)
+            
+            # AVISO DE DIAGNÓSTICO DE CONEXIÓN
+            if r.status_code != 200:
+                st.warning(f"⚠️ {fuente['nombre']} devolvió un código {r.status_code}. Podría estar bloqueando el acceso.")
+                
             soup = BeautifulSoup(r.text, 'html.parser')
             links = soup.find_all('a', href=True)
             procesados, vistos = 0, set()
+            
             for l in links:
                 url_n = l['href']
                 if not url_n.startswith('http'):
                     url_n = "https://www.larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
                 
-                if len(l.get_text().strip()) < 35 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/']): continue
+                texto_enlace = l.get_text().strip()
+                
+                # FILTRO RELAJADO (De 35 a 20 caracteres, sin bloqueo de /category/)
+                if len(texto_enlace) < 20 or url_n in vistos or '/tag/' in url_n or '/autor/' in url_n: 
+                    continue
                 
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
                     h = extraer_hora_especifica(soup_n, fuente['nombre'])
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
+                    
                     if len(cuerpo) > 150:
-                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {l.get_text().strip()} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
+                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {texto_enlace} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
                         vistos.add(url_n)
                         procesados += 1
                 except: continue
@@ -109,7 +124,6 @@ if api_key:
         if len(raw_data) > 300:
             try:
                 model = genai.GenerativeModel('models/gemini-flash-latest')
-                # --- PROMPT CON PRIORIDAD GEOGRÁFICA GLOBAL ---
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS PERMITIDOS: IMPUESTOS, ECONOMÍA y GOBIERNO.
@@ -119,9 +133,9 @@ if api_key:
                 2. TARIJA (Segunda Prioridad)
                 3. Resto de Bolivia.
                 
-                Si un medio nacional (como Unitel o La Razón) tiene noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas primero.
+                Si un medio nacional tiene noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas primero.
                 
-                ESTRUCTURA:
+                ESTRUCTURA OBLIGATORIA:
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO**
                 **Hrs. HH:MM**
