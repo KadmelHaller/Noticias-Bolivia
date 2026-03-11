@@ -21,19 +21,16 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 def extraer_hora_especifica(soup, medio):
     texto = soup.get_text(" ", strip=True)
     
-    # 1. OPINIÓN
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
             m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
             if m: return m.group(1)
 
-    # 2. LOS TIEMPOS
     if medio == "LOS TIEMPOS":
         m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
 
-    # 3. UNITEL
     if medio == "UNITEL":
         m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto.lower())
         if m_rel:
@@ -41,8 +38,6 @@ def extraer_hora_especifica(soup, medio):
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
 
-    # 4. METADATOS: ATB, LA RAZÓN, IN NOTICIAS, ENFOQUE
-    # Usamos "LA RAZÓN" y "LA RAZON" por seguridad
     if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS", "LA RAZÓN", "LA RAZON"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
@@ -53,19 +48,17 @@ def extraer_hora_especifica(soup, medio):
                     m = re.search(r'T(\d{2}):(\d{2})', date_str)
                     if m:
                         hh, mm = int(m.group(1)), m.group(2)
-                        if medio == "ATB": # Corrección UTC para ATB
+                        if medio == "ATB":
                             hh = (hh - 4) % 24
                         return f"{hh:02d}:{mm}"
             except: continue
 
-    # General para el resto
     matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
         if m != ahora.strftime('%H:%M') and m != "04:00": return m
     return ""
 
 def procesar_monitoreo():
-    # He movido LA RAZÓN al inicio para ayudar a la priorización
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
@@ -93,23 +86,17 @@ def procesar_monitoreo():
             soup = BeautifulSoup(r.text, 'html.parser')
             links = soup.find_all('a', href=True)
             procesados, vistos = 0, set()
-            
             for l in links:
                 url_n = l['href']
                 if not url_n.startswith('http'):
                     base = fuente['url'].split('.bo')[0] + '.bo' if '.bo' in fuente['url'] else fuente['url'].rstrip('/')
                     url_n = base + ('' if url_n.startswith('/') else '/') + url_n
-                
-                # Filtrado básico de enlaces irrelevantes
-                if len(l.get_text().strip()) < 35 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/', '/autor/']): 
-                    continue
-                
+                if len(l.get_text().strip()) < 35 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/', '/autor/']): continue
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
                     h = extraer_hora_especifica(soup_n, fuente['nombre'])
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
-                    
                     if len(cuerpo) > 150:
                         data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {l.get_text().strip()} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
                         vistos.add(url_n)
@@ -127,17 +114,18 @@ if api_key:
             try:
                 model = genai.GenerativeModel('models/gemini-flash-latest')
                 
+                # PROMPT AJUSTADO: Solo Impuestos, Economía y Gobierno
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                REGLAS DE FILTRADO: Economía, Gobierno, Impuestos, Aduana, Política Nacional. EXCLUIR Deportes, Farándula y Sucesos Policiales.
-                REGLA DE HORA: Usa el campo 'HORA'. Si está vacía, intenta deducirla o pon "Sin hora en datos".
-                REGLA DE PRIORIDAD: Asegúrate de incluir noticias de "OPINIÓN", "LOS TIEMPOS" Y "LA VOZ DE TARIJA" si están disponibles en los datos.
+                REGLAS DE FILTRADO: IMPUESTOS, ECONOMÍA y GOBIERNO. EXCLUIR TODO LO DEMÁS (Deportes, Farándula, Policiales, Internacional).
+                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon "Sin hora en datos y metadatos".
+                REGLA DE MEDIOS: PRIORIZA "OPINIÓN", "LOS TIEMPOS" Y "LA VOZ DE TARIJA".
                 
                 ESTRUCTURA OBLIGATORIA (CON SALTOS DE LÍNEA):
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO**
                 **Hrs. HH:MM**
-                Resumen detallado y profesional de 4 a 6 líneas.
+                Resumen detallado de 4 a 6 líneas.
                 URL
                 
                 No agrupar por medio. Lista continua. Separar cada noticia con un salto de línea doble.
@@ -145,12 +133,7 @@ if api_key:
                 
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
-                
-                # REEMPLAZO SEGURO DE NEGRILLAS USANDO REGEX
-                # Busca contenido entre ** y lo pone en <b>
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
-                
-                # Mostrar resultado con estilo profesional
                 st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
