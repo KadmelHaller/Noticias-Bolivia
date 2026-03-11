@@ -63,7 +63,8 @@ def procesar_monitoreo():
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/"},
+        # Apuntamos a la sección nacional para asegurar que pase los filtros de Gobierno/Economía
+        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/nacional/"}, 
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -74,9 +75,12 @@ def procesar_monitoreo():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36'}
-    data_final = ""
-    pb = st.progress(0)
+    # User-Agent más completo para evitar bloqueos de seguridad
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+    }
     
     for i, fuente in enumerate(fuentes):
         st.write(f"📡 {fuente['nombre']}...")
