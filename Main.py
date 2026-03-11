@@ -20,24 +20,20 @@ api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
     texto = soup.get_text(" ", strip=True)
-    
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
             m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
             if m: return m.group(1)
-
     if medio == "LOS TIEMPOS":
         m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
-
     if medio == "UNITEL":
         m_rel = re.search(r'hace\s+(\d+)\s+(minuto|hora)', texto.lower())
         if m_rel:
             cant = int(m_rel.group(1))
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
-
     if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS", "LA RAZÓN", "LA RAZON"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
@@ -48,11 +44,9 @@ def extraer_hora_especifica(soup, medio):
                     m = re.search(r'T(\d{2}):(\d{2})', date_str)
                     if m:
                         hh, mm = int(m.group(1)), m.group(2)
-                        if medio == "ATB":
-                            hh = (hh - 4) % 24
+                        if medio == "ATB": hh = (hh - 4) % 24
                         return f"{hh:02d}:{mm}"
             except: continue
-
     matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
         if m != ahora.strftime('%H:%M') and m != "04:00": return m
@@ -63,8 +57,7 @@ def procesar_monitoreo():
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        # Apuntamos a la sección nacional para asegurar que pase los filtros de Gobierno/Economía
-        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/nacional/"}, 
+        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/category/economia/"}, # URL específica
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -75,12 +68,11 @@ def procesar_monitoreo():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
     ]
     
-    # User-Agent más completo para evitar bloqueos de seguridad
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
+    data_final = ""
+    
+    # --- CORRECCIÓN NameError: Definir pb antes del bucle ---
+    pb = st.progress(0)
     
     for i, fuente in enumerate(fuentes):
         st.write(f"📡 {fuente['nombre']}...")
@@ -117,12 +109,10 @@ if api_key:
         if len(raw_data) > 300:
             try:
                 model = genai.GenerativeModel('models/gemini-flash-latest')
-                
-                # PROMPT AJUSTADO: Solo Impuestos, Economía y Gobierno
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                REGLAS DE FILTRADO: IMPUESTOS, ECONOMÍA y GOBIERNO. EXCLUIR TODO LO DEMÁS (Deportes, Farándula, Policiales, Internacional).
-                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon "Sin hora en datos y metadatos".
+                REGLAS DE FILTRADO: IMPUESTOS, ECONOMÍA y GOBIERNO. EXCLUIR TODO LO DEMÁS.
+                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon "Sin hora en datos".
                 REGLA DE MEDIOS: PRIORIZA "OPINIÓN", "LOS TIEMPOS" Y "LA VOZ DE TARIJA".
                 
                 ESTRUCTURA OBLIGATORIA (CON SALTOS DE LÍNEA):
@@ -134,7 +124,6 @@ if api_key:
                 
                 No agrupar por medio. Lista continua. Separar cada noticia con un salto de línea doble.
                 """
-                
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
