@@ -67,8 +67,8 @@ def procesar_monitoreo():
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
-        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
+        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
