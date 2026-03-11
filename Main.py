@@ -53,13 +53,12 @@ def extraer_hora_especifica(soup, medio):
     return ""
 
 def procesar_monitoreo():
-    # FUENTES ORDENADAS POR PRIORIDAD GEOGRÁFICA
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        # NUEVA URL PARA LA RAZÓN
-        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/economia/"},
+        # URL CORREGIDA PARA LA RAZÓN (Sección Economía y Empresa)
+        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/categoria/economia-y-empresa/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -83,9 +82,9 @@ def procesar_monitoreo():
         try:
             r = requests.get(fuente['url'], headers=headers, timeout=15)
             
-            # AVISO DE DIAGNÓSTICO DE CONEXIÓN
             if r.status_code != 200:
-                st.warning(f"⚠️ {fuente['nombre']} devolvió un código {r.status_code}. Podría estar bloqueando el acceso.")
+                st.warning(f"⚠️ {fuente['nombre']} devolvió un código {r.status_code}. Saltando...")
+                continue
                 
             soup = BeautifulSoup(r.text, 'html.parser')
             links = soup.find_all('a', href=True)
@@ -93,17 +92,19 @@ def procesar_monitoreo():
             
             for l in links:
                 url_n = l['href']
+                # Construcción robusta de URL para La Razón
                 if not url_n.startswith('http'):
-                    url_n = "https://www.larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
+                    url_n = "https://larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
                 
                 texto_enlace = l.get_text().strip()
                 
-                # FILTRO RELAJADO (De 35 a 20 caracteres, sin bloqueo de /category/)
                 if len(texto_enlace) < 20 or url_n in vistos or '/tag/' in url_n or '/autor/' in url_n: 
                     continue
                 
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
+                    if rn.status_code != 200: continue
+                    
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
                     h = extraer_hora_especifica(soup_n, fuente['nombre'])
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
@@ -127,22 +128,16 @@ if api_key:
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS PERMITIDOS: IMPUESTOS, ECONOMÍA y GOBIERNO.
+                PRIORIDAD GEOGRÁFICA: 1. COCHABAMBA, 2. TARIJA, 3. Resto de Bolivia.
                 
-                PRIORIDAD GEOGRÁFICA (Aplica a TODOS los medios):
-                1. COCHABAMBA (Prioridad Máxima)
-                2. TARIJA (Segunda Prioridad)
-                3. Resto de Bolivia.
+                Instrucción: Si hay noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas al principio sin importar el medio.
                 
-                Si un medio nacional tiene noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas primero.
-                
-                ESTRUCTURA OBLIGATORIA:
+                ESTRUCTURA:
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO**
                 **Hrs. HH:MM**
                 Resumen detallado (4-6 líneas).
                 URL
-                
-                Formato: Lista continua con doble salto de línea entre noticias.
                 """
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
