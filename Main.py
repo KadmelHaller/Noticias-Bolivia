@@ -53,11 +53,12 @@ def extraer_hora_especifica(soup, medio):
     return ""
 
 def procesar_monitoreo():
+    # --- ORDEN DE FUENTES SOLICITADO ---
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/category/economia/"}, # URL específica
+        {"nombre": "LA RAZÓN", "url": "https://www.larazon.bo/category/economia/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -70,8 +71,6 @@ def procesar_monitoreo():
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
     data_final = ""
-    
-    # --- CORRECCIÓN NameError: Definir pb antes del bucle ---
     pb = st.progress(0)
     
     for i, fuente in enumerate(fuentes):
@@ -85,9 +84,10 @@ def procesar_monitoreo():
             for l in links:
                 url_n = l['href']
                 if not url_n.startswith('http'):
-                    base = fuente['url'].split('.bo')[0] + '.bo' if '.bo' in fuente['url'] else fuente['url'].rstrip('/')
-                    url_n = base + ('' if url_n.startswith('/') else '/') + url_n
-                if len(l.get_text().strip()) < 35 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/', '/autor/']): continue
+                    url_n = "https://www.larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
+                
+                if len(l.get_text().strip()) < 35 or url_n in vistos or any(x in url_n for x in ['/tag/', '/category/']): continue
+                
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
@@ -109,20 +109,26 @@ if api_key:
         if len(raw_data) > 300:
             try:
                 model = genai.GenerativeModel('models/gemini-flash-latest')
+                # --- PROMPT CON PRIORIDAD GEOGRÁFICA GLOBAL ---
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                REGLAS DE FILTRADO: IMPUESTOS, ECONOMÍA y GOBIERNO. EXCLUIR TODO LO DEMÁS.
-                REGLA DE HORA: Usa 'HORA'. Si está vacía, pon "Sin hora en datos".
-                REGLA DE MEDIOS: PRIORIZA "OPINIÓN", "LOS TIEMPOS" Y "LA VOZ DE TARIJA".
+                TEMAS PERMITIDOS: IMPUESTOS, ECONOMÍA y GOBIERNO.
                 
-                ESTRUCTURA OBLIGATORIA (CON SALTOS DE LÍNEA):
+                PRIORIDAD GEOGRÁFICA (Aplica a TODOS los medios):
+                1. COCHABAMBA (Prioridad Máxima)
+                2. TARIJA (Segunda Prioridad)
+                3. Resto de Bolivia.
+                
+                Si un medio nacional (como Unitel o La Razón) tiene noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas primero.
+                
+                ESTRUCTURA:
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO**
                 **Hrs. HH:MM**
-                Resumen detallado de 4 a 6 líneas.
+                Resumen detallado (4-6 líneas).
                 URL
                 
-                No agrupar por medio. Lista continua. Separar cada noticia con un salto de línea doble.
+                Formato: Lista continua con doble salto de línea entre noticias.
                 """
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
