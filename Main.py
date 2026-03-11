@@ -40,9 +40,9 @@ def extraer_hora_especifica(soup, medio):
             cant = int(m_rel.group(1))
             delta = timedelta(minutes=cant) if 'min' in m_rel.group(2) else timedelta(hours=cant)
             return (ahora - delta).strftime('%H:%M')
-
+ 
     # 4. ATB (Corrección UTC -4) y otros metadatos
-    if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS"]:
+    if medio in ["ATB", "IN NOTICIAS", "ENFOQUE NEWS", "LA RAZÓN"]:
         for s in soup.find_all('script', type='application/ld+json'):
             try:
                 data = json.loads(s.string)
@@ -67,6 +67,7 @@ def procesar_monitoreo():
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
+        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
