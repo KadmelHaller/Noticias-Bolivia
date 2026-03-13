@@ -126,7 +126,8 @@ if api_key:
                 model = genai.GenerativeModel('models/gemini-flash-latest')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                TEMAS PERMITIDOS: IMPUESTOS, ECONOMÍA y GOBIERNO.
+                Extraer noticias de todos los medios detallados.
+                Prioridad de temas: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
                 PRIORIDAD DE MEDIOS: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES
                 PRIORIDAD GEOGRÁFICA: 1. COCHABAMBA, 2. TARIJA, 3. Resto de Bolivia.
                 
