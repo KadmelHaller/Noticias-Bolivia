@@ -57,8 +57,7 @@ def procesar_monitoreo():
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
         {"nombre": "LA VOZ DE TARIJA", "url": "https://lavozdetarija.com/"},
-        # URL CORREGIDA PARA LA RAZÓN (Sección Economía y Empresa)
-        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/categoria/economia-y-empresa/"},
+        {"nombre": "LA RAZÓN", "url": "https://larazon.bo/"},
         {"nombre": "UNITEL", "url": "https://unitel.bo/noticias/economia"},
         {"nombre": "RED UNO", "url": "https://www.reduno.com.bo/"},
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
@@ -137,7 +136,7 @@ if api_key:
                 **NOMBRE DEL MEDIO**
                 **Hrs. HH:MM**
                 Resumen detallado (4-6 líneas).
-                URL
+                URL directo, sin etiqueta
                 """
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
