@@ -127,6 +127,7 @@ if api_key:
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS PERMITIDOS: IMPUESTOS, ECONOMÍA y GOBIERNO.
+                PRIORIDAD DE MEDIOS: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES
                 PRIORIDAD GEOGRÁFICA: 1. COCHABAMBA, 2. TARIJA, 3. Resto de Bolivia.
                 
                 Instrucción: Si hay noticias de Cochabamba o Tarija sobre los temas permitidos, ponlas al principio sin importar el medio.
