@@ -69,4 +69,77 @@ def procesar_monitoreo():
         {"nombre": "ATB", "url": "https://www.atb.com.bo/"},
         {"nombre": "BOLIVIA TV", "url": "https://www.boliviatv.bo/"},
         {"nombre": "BOLIVISION", "url": "https://www.redbolivision.tv.bo/"},
-        {"nombre": "URGENTE BO", "url": "https://www.urgente
+        {"nombre": "URGENTE BO", "url": "https://www.urgente.bo/"},
+        {"nombre": "IN NOTICIAS", "url": "https://innoticiasbo.com/"},
+        {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
+    ]
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
+    data_final = ""
+    pb = st.progress(0)
+    
+    for i, fuente in enumerate(fuentes):
+        st.write(f"📡 {fuente['nombre']}...")
+        pb.progress((i + 1) / len(fuentes))
+        try:
+            r = requests.get(fuente['url'], headers=headers, timeout=15)
+            if r.status_code != 200: continue
+            
+            soup = BeautifulSoup(r.text, 'html.parser')
+            links = soup.find_all('a', href=True)
+            procesados, vistos = 0, set()
+            
+            for l in links:
+                url_n = l['href']
+                if not url_n.startswith('http'):
+                    url_n = "https://larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
+                
+                texto_enlace = l.get_text().strip()
+                if len(texto_enlace) < 20 or url_n in vistos or any(x in url_n for x in ['/tag/', '/autor/']): 
+                    continue
+                
+                try:
+                    rn = requests.get(url_n, headers=headers, timeout=10)
+                    if rn.status_code != 200: continue
+                    soup_n = BeautifulSoup(rn.text, 'html.parser')
+                    h = extraer_hora_especifica(soup_n, fuente['nombre'])
+                    cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
+                    
+                    if len(cuerpo) > 150:
+                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {texto_enlace} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
+                        vistos.add(url_n)
+                        procesados += 1
+                except: continue
+                if procesados >= 5: break
+        except: continue
+    return data_final
+
+if api_key:
+    genai.configure(api_key=api_key)
+    if st.button('🚀 GENERAR REPORTE FINAL'):
+        raw_data = procesar_monitoreo()
+        if len(raw_data) > 300:
+            try:
+                # Usando el modelo que confirmaste como funcional
+                model = genai.GenerativeModel('models/gemini-flash-latest')
+                prompt = f"""
+                HOY ES: {fecha_hoy_bonita}.
+                TEMAS PRIORITARIOS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
+                
+                ORDEN DE RESULTADOS:
+                1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
+                2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
+                
+                ESTRUCTURA:
+                **TITULAR EN MAYÚSCULAS**
+                **NOMBRE DEL MEDIO**
+                **Hrs. HH:MM**
+                Resumen detallado (4-6 líneas).
+                URL directo
+                """
+                res = model.generate_content([prompt, raw_data])
+                st.subheader("📋 Resumen Informativo:")
+                processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error con el modelo Gemini: {str(e)}")
