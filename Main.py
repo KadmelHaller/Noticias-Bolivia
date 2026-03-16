@@ -19,20 +19,21 @@ st.title(f"📰 MONITOREO TÉCNICO: {fecha_hoy_bonita}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
+    """Reforzado para capturar horas omitidas en metadatos y JSON-LD"""
     texto = soup.get_text(" ", strip=True)
-    # 1. Búsqueda en Metadatos
+    # 1. Metadatos de publicación (Muy común en La Razón y Unitel)
     meta_time = soup.find("meta", property="article:published_time") or soup.find("meta", itemprop="datePublished")
     if meta_time:
         m = re.search(r'(\d{2}):(\d{2})', meta_time.get("content", ""))
         if m: return f"{m.group(1)}:{m.group(2)}"
 
-    # 2. Búsqueda en JSON-LD
+    # 2. JSON-LD (Datos estructurados)
     for s in soup.find_all('script', type='application/ld+json'):
         try:
             data = json.loads(s.string)
             nodes = data.get('@graph', [data]) if isinstance(data, dict) else data
             for node in (nodes if isinstance(nodes, list) else [nodes]):
-                ds = node.get('datePublished', '')
+                ds = node.get('datePublished', '') or node.get('dateModified', '')
                 m = re.search(r'T(\d{2}):(\d{2})', ds)
                 if m:
                     hh, mm = int(m.group(1)), m.group(2)
@@ -40,7 +41,7 @@ def extraer_hora_especifica(soup, medio):
                     return f"{hh:02d}:{mm}"
         except: continue
 
-    # 3. Selectores específicos
+    # 3. Patrones de texto específicos
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
@@ -56,6 +57,7 @@ def extraer_hora_especifica(soup, medio):
     return ""
 
 def procesar_monitoreo():
+    # FUENTES SEGÚN TU ORDEN ESPECÍFICO
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
         {"nombre": "LOS TIEMPOS", "url": "https://www.lostiempos.com/"},
@@ -71,7 +73,7 @@ def procesar_monitoreo():
         {"nombre": "ENFOQUE NEWS", "url": "https://enfoquenews.com.bo/"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     data_final = ""
     pb = st.progress(0)
     
@@ -117,15 +119,16 @@ if api_key:
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
             try:
-                # CAMBIO REALIZADO: Nombre del modelo corregido para evitar 404
+                # CAMBIO DE MODELO PARA SOLUCIONAR EL ERROR 404
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
-                TEMAS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
+                Extraer noticias de todos los medios detallados.
+                Prioridad de temas: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
                 
-                ORDEN DE RESULTADOS:
-                1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
-                2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
+                ORDEN DE RESULTADOS (ESTRICTO):
+                1. PRIMERO POR MEDIO: OPINIÓN, luego LOS TIEMPOS, luego LA VOZ DE TARIJA, luego LA RAZÓN, luego Canales de TV (Unitel, Red Uno, ATB, Bolivia TV, Bolivisión), luego el resto.
+                2. SEGUNDO POR GEOGRAFÍA (DENTRO DE CADA MEDIO): Primero Cochabamba, segundo Tarija, finalmente Nacional.
                 
                 ESTRUCTURA:
                 **TITULAR EN MAYÚSCULAS**
@@ -139,4 +142,4 @@ if api_key:
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                 st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Error con el modelo Gemini: {str(e)}")
