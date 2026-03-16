@@ -117,8 +117,8 @@ if api_key:
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
             try:
-                # He usado el nombre del modelo que suele ser más estable en entornos Streamlit Cloud
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # Usando el nombre de modelo más compatible para evitar el error 404 de versión
+                model = genai.GenerativeModel('gemini-pro')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
