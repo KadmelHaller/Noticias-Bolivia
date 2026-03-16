@@ -19,9 +19,8 @@ st.title(f"📰 MONITOREO TÉCNICO: {fecha_hoy_bonita}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
-    """Mejorada para capturar horas que antes se omitían"""
     texto = soup.get_text(" ", strip=True)
-    # 1. Búsqueda en Metadatos (frecuente en La Razón y Unitel)
+    # 1. Búsqueda en Metadatos
     meta_time = soup.find("meta", property="article:published_time") or soup.find("meta", itemprop="datePublished")
     if meta_time:
         m = re.search(r'(\d{2}):(\d{2})', meta_time.get("content", ""))
@@ -41,7 +40,7 @@ def extraer_hora_especifica(soup, medio):
                     return f"{hh:02d}:{mm}"
         except: continue
 
-    # 3. Selectores específicos por medio
+    # 3. Selectores específicos
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
@@ -118,14 +117,15 @@ if api_key:
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
             try:
-                model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+                # CAMBIO REALIZADO: Nombre del modelo corregido para evitar 404
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
                 
                 ORDEN DE RESULTADOS:
                 1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
-                2. POR GEOGRAFÍA (DENTRO DE CADA MEDIO): Primero Cochabamba, segundo Tarija, tercero Nacional.
+                2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
                 
                 ESTRUCTURA:
                 **TITULAR EN MAYÚSCULAS**
@@ -133,8 +133,6 @@ if api_key:
                 **Hrs. HH:MM**
                 Resumen detallado (4-6 líneas).
                 URL directo
-                
-                No añadas saludos ni comentarios. Solo el reporte.
                 """
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
