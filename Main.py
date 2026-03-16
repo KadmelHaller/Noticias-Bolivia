@@ -19,16 +19,14 @@ st.title(f"📰 MONITOREO TÉCNICO: {fecha_hoy_bonita}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def extraer_hora_especifica(soup, medio):
-    """Revisión de marcas de hora para mejorar la precisión"""
     texto = soup.get_text(" ", strip=True)
-    
-    # Intento 1: Metadatos de publicación (Muy efectivo en La Razón y Unitel)
+    # 1. Búsqueda en Metadatos
     meta_time = soup.find("meta", property="article:published_time") or soup.find("meta", itemprop="datePublished")
     if meta_time:
         m = re.search(r'(\d{2}):(\d{2})', meta_time.get("content", ""))
         if m: return f"{m.group(1)}:{m.group(2)}"
 
-    # Intento 2: JSON-LD
+    # 2. Búsqueda en JSON-LD
     for s in soup.find_all('script', type='application/ld+json'):
         try:
             data = json.loads(s.string)
@@ -42,7 +40,7 @@ def extraer_hora_especifica(soup, medio):
                     return f"{hh:02d}:{mm}"
         except: continue
 
-    # Intento 3: Selectores por medio
+    # 3. Selectores específicos por medio
     if medio == "OPINIÓN":
         cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
         if cuerpo:
@@ -52,7 +50,6 @@ def extraer_hora_especifica(soup, medio):
         m = re.search(r'(\d{1,2})h(\d{2})', texto)
         if m: return f"{m.group(1)}:{m.group(2)}"
     
-    # Intento 4: Búsqueda general de patrones HH:MM
     matches = re.findall(r'(\d{1,2}:\d{2})', texto)
     for m in matches:
         if m != ahora.strftime('%H:%M') and m != "04:00": return m
@@ -95,7 +92,8 @@ def procesar_monitoreo():
                     url_n = "https://larazon.bo" + url_n if "larazon" in fuente['url'] else fuente['url'].rstrip('/') + "/" + url_n.lstrip('/')
                 
                 texto_enlace = l.get_text().strip()
-                if len(texto_enlace) < 20 or url_n in vistos or any(x in url_n for x in ['/tag/', '/autor/']): continue
+                if len(texto_enlace) < 20 or url_n in vistos or any(x in url_n for x in ['/tag/', '/autor/']): 
+                    continue
                 
                 try:
                     rn = requests.get(url_n, headers=headers, timeout=10)
@@ -105,4 +103,40 @@ def procesar_monitoreo():
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
                     
                     if len(cuerpo) > 150:
-                        data_final +=
+                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {texto_enlace} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
+                        vistos.add(url_n)
+                        procesados += 1
+                except: continue
+                if procesados >= 5: break
+        except: continue
+    return data_final
+
+if api_key:
+    genai.configure(api_key=api_key)
+    if st.button('🚀 GENERAR REPORTE FINAL'):
+        raw_data = procesar_monitoreo()
+        if len(raw_data) > 300:
+            try:
+                # He usado el nombre del modelo que suele ser más estable en entornos Streamlit Cloud
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                prompt = f"""
+                HOY ES: {fecha_hoy_bonita}.
+                TEMAS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
+                
+                ORDEN DE RESULTADOS:
+                1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
+                2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
+                
+                ESTRUCTURA:
+                **TITULAR EN MAYÚSCULAS**
+                **NOMBRE DEL MEDIO**
+                **Hrs. HH:MM**
+                Resumen detallado (4-6 líneas).
+                URL directo
+                """
+                res = model.generate_content([prompt, raw_data])
+                st.subheader("📋 Resumen Informativo:")
+                processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error con el modelo Gemini: {str(e)}")
