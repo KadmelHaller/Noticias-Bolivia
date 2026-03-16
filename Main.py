@@ -117,8 +117,8 @@ if api_key:
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
             try:
-                # Usando el nombre de modelo más compatible para evitar el error 404 de versión
-                model = genai.GenerativeModel('gemini-pro')
+                # CAMBIO CLAVE: Usamos el prefijo 'models/' explícito requerido por v1beta en algunos entornos
+                model = genai.GenerativeModel('models/gemini-1.0-pro')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
