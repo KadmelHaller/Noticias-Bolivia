@@ -126,16 +126,16 @@ if api_key:
                 HOY ES: {fecha_hoy_bonita}.
                 TEMAS PRIORITARIOS: IMPUESTOS, ECONOMÍA y GOBIERNO BOLIVIANO.
                 
-                ORDEN DE RESULTADOS:
+                ORDEN DE RESULTADOS, SIN ETIQUETAS:
                 1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
                 2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
                 
                 ESTRUCTURA:
                 **TITULAR EN MAYÚSCULAS**
-                **NOMBRE DEL MEDIO**
+                **NOMBRE DEL MEDIO EN MAYÚSCULAS**
                 **Hrs. HH:MM**
                 Resumen detallado (4-6 líneas).
-                URL directo
+                URL directo, sin etiqueta.
                 """
                 res = model.generate_content([prompt, raw_data])
                 st.subheader("📋 Resumen Informativo:")
