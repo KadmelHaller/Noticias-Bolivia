@@ -18,46 +18,6 @@ st.title(f"📰 MONITOREO TÉCNICO: {fecha_hoy_bonita}")
 
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
-def extraer_hora_especifica(soup, medio):
-    """Mejora en la captura de horas para evitar campos vacíos"""
-    texto = soup.get_text(" ", strip=True)
-    
-    # 1. Metadatos (Efectivo en La Razón, Unitel y El Deber)
-    meta_time = soup.find("meta", property="article:published_time") or soup.find("meta", itemprop="datePublished")
-    if meta_time:
-        m = re.search(r'(\d{2}):(\d{2})', meta_time.get("content", ""))
-        if m: return f"{m.group(1)}:{m.group(2)}"
-
-    # 2. JSON-LD
-    for s in soup.find_all('script', type='application/ld+json'):
-        try:
-            data = json.loads(s.string)
-            nodes = data.get('@graph', [data]) if isinstance(data, dict) else data
-            for node in (nodes if isinstance(nodes, list) else [nodes]):
-                ds = node.get('datePublished', '')
-                m = re.search(r'T(\d{2}):(\d{2})', ds)
-                if m:
-                    hh, mm = int(m.group(1)), m.group(2)
-                    if medio == "ATB": hh = (hh - 4) % 24
-                    return f"{hh:02d}:{mm}"
-        except: continue
-
-    # 3. Reglas específicas por medio
-    if medio == "OPINIÓN":
-        cuerpo = soup.find('article') or soup.find('div', class_='cuerpo')
-        if cuerpo:
-            m = re.search(r'(\d{1,2}:\d{2})', cuerpo.get_text())
-            if m: return m.group(1)
-    if medio == "LOS TIEMPOS":
-        m = re.search(r'(\d{1,2})h(\d{2})', texto)
-        if m: return f"{m.group(1)}:{m.group(2)}"
-    
-    # 4. Búsqueda de patrón general
-    matches = re.findall(r'(\d{1,2}:\d{2})', texto)
-    for m in matches:
-        if m != ahora.strftime('%H:%M') and m != "04:00": return m
-    return "Sin hora"
-
 def procesar_monitoreo():
     fuentes = [
         {"nombre": "OPINIÓN", "url": "https://www.opinion.com.bo/"},
@@ -102,11 +62,10 @@ def procesar_monitoreo():
                     rn = requests.get(url_n, headers=headers, timeout=10)
                     if rn.status_code != 200: continue
                     soup_n = BeautifulSoup(rn.text, 'html.parser')
-                    h = extraer_hora_especifica(soup_n, fuente['nombre'])
                     cuerpo = " ".join([p.get_text().strip() for p in soup_n.find_all('p', limit=6) if len(p.get_text()) > 25])
                     
                     if len(cuerpo) > 150:
-                        data_final += f"MEDIO: {fuente['nombre']} | HORA: {h} | TITULAR: {texto_enlace} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
+                        data_final += f"MEDIO: {fuente['nombre']} | TITULAR: {texto_enlace} | TXT: {cuerpo[:900]} | LINK: {url_n}\n\n"
                         vistos.add(url_n)
                         procesados += 1
                 except: continue
@@ -120,7 +79,6 @@ if api_key:
         raw_data = procesar_monitoreo()
         if len(raw_data) > 300:
             try:
-                # Usando el modelo que confirmaste como funcional
                 model = genai.GenerativeModel('models/gemini-flash-latest')
                 prompt = f"""
                 HOY ES: {fecha_hoy_bonita}.
@@ -130,10 +88,9 @@ if api_key:
                 1. POR MEDIO: OPINIÓN, LOS TIEMPOS, LA VOZ DE TARIJA, RESTO DE PERIÓDICOS, TELEVISIÓN, MEDIOS DIGITALES.
                 2. POR GEOGRAFÍA (DENTRO DE CADA GRUPO): Primero Cochabamba, segundo Tarija, tercero Nacional.
                 
-                ESTRUCTURA:
+                ESTRUCTURA (SIN HORA):
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO EN MAYÚSCULAS**
-                **Hrs. HH:MM**
                 Resumen detallado (4-6 líneas).
                 URL directo, sin etiqueta.
                 """
