@@ -44,26 +44,26 @@ def procesar_fuentes():
     fuentes = [
         # --- COCHABAMBA (Prioridad 1) ---
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/ultimas-noticias", "t": "Escrito", "r": "Cochabamba"},
-        {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/seccion/cochabamba/", "t": "Escrito", "r": "Cochabamba"},
+        {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "t": "Escrito", "r": "Cochabamba"},
         {"n": "RRSS CBBA", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:tiktok.com+OR+site:instagram.com+OR+site:x.com+impuestos+cochabamba+2025", "t": "Influencer", "r": "Cochabamba"},
         
         # --- SANTA CRUZ (Prioridad 2) ---
-        {"n": "EL DEBER", "u": "https://eldeber.com.bo/economia", "t": "Escrito", "r": "Santa Cruz"},
-        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/category/economia/", "t": "Escrito", "r": "Santa Cruz"},
-        {"n": "LA ESTRELLA", "u": "https://www.laestrelladeloriente.com/category/nacional/", "t": "Escrito", "r": "Santa Cruz"},
-        {"n": "EL DÍA", "u": "https://www.eldia.com.bo/index.php?cat=357", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "LA ESTRELLA", "u": "https://www.laestrelladeloriente.com/", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "EL DÍA", "u": "https://www.eldia.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "RRSS SCZ", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:tiktok.com+OR+site:instagram.com+OR+site:x.com+impuestos+santa+cruz+2025", "t": "Influencer", "r": "Santa Cruz"},
 
         # --- TV Y DIGITALES ---
-        {"n": "UNITEL", "u": "https://unitel.bo/noticias/economia", "t": "TV", "r": "Nacional"},
-        {"n": "RED UNO", "u": "https://www.reduno.com.bo/noticias", "t": "TV", "r": "Nacional"},
-        {"n": "ATB", "u": "https://www.atb.com.bo/seccion/economia", "t": "TV", "r": "Nacional"},
-        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/noticias", "t": "TV", "r": "Nacional"},
-        {"n": "BOLIVISION", "u": "https://www.redbolivision.tv.bo/noticias/", "t": "TV", "r": "Nacional"},
-        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"},
+        {"n": "UNITEL", "u": "https://unitel.bo/", "t": "TV", "r": "Nacional"},
+        {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "t": "TV", "r": "Nacional"},
+        {"n": "ATB", "u": "https://www.atb.com.bo/", "t": "TV", "r": "Nacional"},
+        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/", "t": "TV", "r": "Nacional"},
+        {"n": "BOLIVISION", "u": "https://www.redbolivision.tv.bo/", "t": "TV", "r": "Nacional"},
+        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/", "t": "Digital", "r": "Nacional"},
         {"n": "IN NOTICIAS", "u": "https://innoticiasbo.com/", "t": "Digital", "r": "Nacional"},
         {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "t": "Digital", "r": "Nacional"},
-        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/category/economia/", "t": "Escrito", "r": "Nacional"}
+        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "t": "Escrito", "r": "Nacional"}
     ]
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
@@ -135,11 +135,11 @@ if api_key:
                    1.3 MEDIOS DIGITALES
                    1.4 INFLUENCERS (FB, TK, IG, X)
 
-                ESTRUCTURA DE CADA NOTICIA:
+                ESTRUCTURA DE CADA NOTICIA CON SALTO DE LÍNEA:
                 **TITULAR EN MAYÚSCULAS**
                 **NOMBRE DEL MEDIO EN MAYÚSCULAS**
-                Resumen de 4 a 6 líneas enfocado en el impacto tributario o económico.
-                URL directo
+                Resumen de 4 a 6 líneas como máximo.
+                URL directo, sin etiqueta
                 """
                 res = model.generate_content([prompt, raw_data])
                 processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
