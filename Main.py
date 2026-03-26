@@ -9,51 +9,60 @@ from urllib.parse import urlparse, parse_qs
 
 st.set_page_config(page_title="Monitoreo Bolivia Pro", page_icon="🇧🇴", layout="wide")
 
-# --- CONFIGURACIÓN DE TIEMPO ---
+# --- CONFIGURACIÓN DE TIEMPO Y FILTROS ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_bonita = ahora.strftime('%d/%m/%Y')
 
-# --- FILTROS AMPLIADOS (Para asegurar que siempre salga algo) ---
-TEMAS_OK = ["impuesto", "sin", "tribut", "factur", "fiscal", "econom", "gobiern", "arce", "dolar", "clausur", "aduana", "subsidio", "gasolina", "diesel", "presupuest", "banco", "comercio", "municip"]
+# Palabras clave para asegurar relevancia en economía e impuestos
+TEMAS_OK = ["impuesto", "sin", "tribut", "factur", "fiscal", "econom", "gobiern", "arce", "dolar", "clausur", "aduana", "subsidio", "gasolina", "diesel", "presupuest"]
 
 def limpiar_url_google(url_google):
-    """Extrae el link real de Facebook/TikTok/X de la redirección de Google"""
+    """Limpia redirecciones de Google para obtener el link directo a la red social"""
     if "google.com/url" in url_google:
-        try:
-            parsed = urlparse(url_google)
-            res = parse_qs(parsed.query).get('q')
-            if res: return res[0]
-        except: pass
+        parsed = urlparse(url_google)
+        res = parse_qs(parsed.query).get('q')
+        return res[0] if res else url_google
     return url_google
 
-def es_relevante(texto, url):
+def es_relevante_y_actual(texto, url):
     txt = (texto + url).lower()
-    # Filtro de año: solo permitimos 2024, 2025, 2026 o noticias sin año (actuales)
     if any(old in txt for old in ["2021", "2022", "2023"]): return False
     return any(t in txt for t in TEMAS_OK)
 
-st.title(f"📰 MONITOREO EN VIVO: {fecha_hoy_bonita}")
-st.info("Nota: Se ha desactivado el historial. El reporte mostrará todo lo disponible en la red ahora mismo.")
+st.title(f"📰 MONITOREO ESTRATÉGICO: {fecha_hoy_bonita}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def procesar_fuentes():
     fuentes = [
+        # --- COCHABAMBA ---
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/ultimas-noticias", "t": "Escrito", "r": "Cochabamba"},
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/seccion/cochabamba/", "t": "Escrito", "r": "Cochabamba"},
+        {"n": "ATB CBBA", "u": "https://www.atb.com.bo/seccion/cochabamba", "t": "TV", "r": "Cochabamba"},
+        {"n": "RRSS CBBA", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:tiktok.com+OR+site:instagram.com+OR+site:x.com+impuestos+cochabamba+2026", "t": "Influencer", "r": "Cochabamba"},
+        
+        # --- SANTA CRUZ ---
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/economia", "t": "Escrito", "r": "Santa Cruz"},
-        {"n": "RRSS CBBA", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:x.com+impuestos+cochabamba+2026", "t": "Influencer", "r": "Cochabamba"},
-        {"n": "RRSS SCZ", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:x.com+impuestos+santa+cruz+2026", "t": "Influencer", "r": "Santa Cruz"},
-        {"n": "UNITEL", "u": "https://unitel.bo/noticias/economia", "t": "TV", "r": "Nacional"},
-        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"}
+        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/category/economia/", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "EL DÍA", "u": "https://www.eldia.com.bo/index.php?cat=357", "t": "Escrito", "r": "Santa Cruz"},
+        {"n": "UNITEL SCZ", "u": "https://unitel.bo/santa-cruz", "t": "TV", "r": "Santa Cruz"},
+        {"n": "RRSS SCZ", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:tiktok.com+OR+site:instagram.com+OR+site:x.com+impuestos+santa+cruz+2026", "t": "Influencer", "r": "Santa Cruz"},
+
+        # --- NACIONAL / OTROS ---
+        {"n": "RED UNO", "u": "https://www.reduno.com.bo/noticias", "t": "TV", "r": "Nacional"},
+        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/noticias", "t": "TV", "r": "Nacional"},
+        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"},
+        {"n": "IN NOTICIAS", "u": "https://innoticiasbo.com/", "t": "Digital", "r": "Nacional"},
+        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "t": "Digital", "r": "Nacional"},
+        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/category/economia/", "t": "Escrito", "r": "Nacional"}
     ]
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
     data_final = ""
     pb = st.progress(0)
     
     for i, f in enumerate(fuentes):
-        st.write(f"🔎 Revisando: {f['n']}...")
+        st.write(f"📡 Procesando {f['n']}...")
         pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(f['u'], headers=headers, timeout=12)
@@ -65,45 +74,56 @@ def procesar_fuentes():
                 url_raw = l['href']
                 url = limpiar_url_google(url_raw)
                 
-                # Validación de Redes Sociales
-                if f['t'] == "Influencer":
-                    if any(domain in url for domain in ["facebook.com", "x.com", "tiktok.com", "instagram.com"]):
-                        # Solo aceptamos links que no sean de la propia plataforma de ayuda
-                        if "sharer" in url or "google.com" in url: continue
-                        titulo_rss = l.get_text().strip() if len(l.get_text()) > 10 else "Publicación relevante en Redes"
-                        data_final += f"R: {f['r']} | T: {f['t']} | M: {f['n']} | TIT: {titulo_rss} | TXT: Post en Red Social | L: {url}\n\n"
-                        vistos += 1
+                if not url.startswith('http') or "google.com/search" in url: continue
                 
-                # Validación de Medios Escritos/TV
-                else:
-                    if not url.startswith('http') or url.count('/') < 4: continue
-                    titulo = l.get_text().strip()
-                    if len(titulo) > 25 and es_relevante(titulo, url):
-                        data_final += f"R: {f['r']} | T: {f['t']} | M: {f['n']} | TIT: {titulo} | TXT: Noticia detectada | L: {url}\n\n"
-                        vistos += 1
+                # Filtro de profundidad para evitar portadas (solo para medios no RRSS)
+                if f['t'] != "Influencer" and url.count('/') < 4: continue
                 
-                if vistos >= 6: break # Traemos más cantidad para asegurar reporte
-        except Exception as e:
-            st.warning(f"No se pudo conectar con {f['n']}")
-            continue
-            
+                titulo = l.get_text().strip()
+                if len(titulo) < 25: continue
+
+                if es_relevante_y_actual(titulo, url):
+                    try:
+                        # EXTRACCIÓN PROFUNDA: Entrar a la noticia para leer el cuerpo
+                        rn = requests.get(url, headers=headers, timeout=8)
+                        s_n = BeautifulSoup(rn.text, 'html.parser')
+                        parrafos = s_n.find_all('p', limit=5)
+                        txt = " ".join([p.get_text().strip() for p in parrafos if len(p.get_text()) > 30])
+                        
+                        if len(txt) > 80 or f['t'] == "Influencer":
+                            data_final += f"REGION: {f['r']} | TIPO: {f['t']} | MEDIO: {f['n']} | TITULAR: {titulo} | TXT: {txt[:800]} | LINK: {url}\n\n"
+                            vistos += 1
+                    except: continue
+                if vistos >= 5: break
+        except: continue
     return data_final
 
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR REPORTE SIN BLOQUEOS'):
-        with st.status("Escaneando la red boliviana...") as status:
+    if st.button('🚀 GENERAR REPORTE INTEGRAL'):
+        with st.status("Ejecutando monitoreo...") as status:
             raw_data = procesar_fuentes()
-            if len(raw_data) > 100:
-                status.update(label="IA analizando titulares encontrados...", state="running")
+            if len(raw_data) > 150:
+                status.update(label="Analizando contenido con IA...", state="running")
                 try:
+                    # Usamos el modelo estable 1.5-flash
                     model = genai.GenerativeModel('gemini-1.5-flash')
-                    prompt = f"Eres un analista. Hoy es {fecha_hoy_bonita}. Organiza estas noticias: 1.Cochabamba, 2.Santa Cruz. Prioriza IMPUESTOS y SIN. Formato: TITULAR (MAYUS), MEDIO (MAYUS), resumen 4 líneas, URL. Si el link es de RRSS, indica que es una tendencia o denuncia digital."
+                    prompt = f"""
+                    FECHA: {fecha_hoy_bonita}. PRIORIDAD: IMPUESTOS/SIN.
+                    JERARQUÍA ESTRICTA:
+                    1. COCHABAMBA: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Influencers.
+                    2. SANTA CRUZ: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Influencers.
+                    
+                    INSTRUCCIONES:
+                    - Las noticias sobre IMPUESTOS o RECAUDACIÓN van primero en cada sección.
+                    - Para Influencers (1.4), describe brevemente la tendencia o denuncia y pon el link.
+                    - Formato: TITULAR (MAYUS), MEDIO (MAYUS), resumen 4-6 líneas, URL.
+                    """
                     res = model.generate_content([prompt, raw_data])
-                    status.update(label="¡Reporte generado!", state="complete")
+                    status.update(label="Reporte finalizado", state="complete")
                     processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                     st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Error en IA: {e}")
             else:
-                st.warning("No se encontraron noticias ni publicaciones en RRSS con los filtros actuales. Intenta en 15 minutos.")
+                st.warning("No se hallaron suficientes noticias. Intenta ampliar los términos de búsqueda o esperar unos minutos.")
