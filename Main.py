@@ -65,4 +65,87 @@ def procesar_fuentes():
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/category/economia/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "EL DÍA", "u": "https://www.eldia.com.bo/index.php?cat=357", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "UNITEL SCZ", "u": "https://unitel.bo/santa-cruz", "t": "TV", "r": "Santa Cruz"},
-        {"n": "RRSS SCZ", "u": "
+        {"n": "RRSS SCZ", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:tiktok.com+OR+site:instagram.com+OR+site:x.com+impuestos+santa+cruz+2026", "t": "Influencer", "r": "Santa Cruz"},
+
+        # --- NACIONAL / OTROS ---
+        {"n": "RED UNO", "u": "https://www.reduno.com.bo/noticias", "t": "TV", "r": "Nacional"},
+        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/noticias", "t": "TV", "r": "Nacional"},
+        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"},
+        {"n": "IN NOTICIAS", "u": "https://innoticiasbo.com/", "t": "Digital", "r": "Nacional"},
+        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "t": "Digital", "r": "Nacional"}
+    ]
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
+    data_final = ""
+    historial = gestionar_historial()
+    pb = st.progress(0)
+    
+    for i, f in enumerate(fuentes):
+        st.write(f"📡 Procesando {f['n']}...")
+        pb.progress((i + 1) / len(fuentes))
+        try:
+            r = requests.get(f['u'], headers=headers, timeout=12)
+            soup = BeautifulSoup(r.text, 'html.parser')
+            links = soup.find_all('a', href=True)
+            vistos = 0
+            
+            for l in links:
+                url_raw = l['href']
+                url = limpiar_url_google(url_raw)
+                
+                if not url.startswith('http') or "google.com/search" in url: continue
+                if url in historial: continue
+                
+                # Filtro de profundidad para evitar portadas (solo medios)
+                if f['t'] != "Influencer" and url.count('/') < 4: continue
+                
+                titulo = l.get_text().strip()
+                if len(titulo) < 25: continue
+
+                if es_relevante_y_actual(titulo, url):
+                    try:
+                        # EXTRACCIÓN PROFUNDA (Cuerpo de la noticia)
+                        rn = requests.get(url, headers=headers, timeout=8)
+                        s_n = BeautifulSoup(rn.text, 'html.parser')
+                        parrafos = s_n.find_all('p', limit=5)
+                        txt = " ".join([p.get_text().strip() for p in parrafos if len(p.get_text()) > 30])
+                        
+                        if len(txt) > 80 or f['t'] == "Influencer":
+                            data_final += f"REGION: {f['r']} | TIPO: {f['t']} | MEDIO: {f['n']} | TITULAR: {titulo} | TXT: {txt[:850]} | LINK: {url}\n\n"
+                            guardar_historial(url)
+                            vistos += 1
+                    except: continue
+                if vistos >= 5: break
+        except: continue
+    return data_final
+
+if api_key:
+    genai.configure(api_key=api_key)
+    if st.button('🚀 GENERAR REPORTE INTEGRAL'):
+        with st.status("Ejecutando monitoreo...") as status:
+            raw_data = procesar_fuentes()
+            if len(raw_data) > 150:
+                status.update(label="Analizando contenido con IA...", state="running")
+                try:
+                    # MODELO ACTUALIZADO: gemini-2.0-flash
+                    model = genai.GenerativeModel('gemini-2.0-flash')
+                    prompt = f"""
+                    FECHA: {fecha_hoy_bonita}. PRIORIDAD: IMPUESTOS.
+                    JERARQUÍA ESTRICTA:
+                    1. COCHABAMBA: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Influencers.
+                    2. SANTA CRUZ: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Influencers.
+                    
+                    INSTRUCCIONES:
+                    - Dentro de cada sección, las noticias de IMPUESTOS/SIN/RECAUDACIÓN van primero.
+                    - Para Influencers (1.4), describe qué se muestra (video, denuncia, post) y el link directo.
+                    - Formato: Títulos y Medios en MAYÚSCULAS. Resumen 4-6 líneas.
+                    """
+                    res = model.generate_content([prompt, raw_data])
+                    status.update(label="Reporte finalizado", state="complete")
+                    processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                    st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error en IA: {e}. Intenta usar 'gemini-1.5-pro' si el error persiste.")
+            else:
+                st.warning("No se hallaron noticias que cumplan los filtros actuales.")
+            
