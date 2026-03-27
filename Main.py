@@ -18,6 +18,7 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
+# Keywords ultra-específicas para evitar noticias de cultura/tecnología exterior
 KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
@@ -40,10 +41,12 @@ def generar_word_oficial(texto, ciudad_tag):
     font.name = 'Times New Roman'
     font.size = Pt(10)
     
+    # Forzar Times New Roman
     rFonts = style.element.rPr.rFonts
     rFonts.set(qn('w:ascii'), 'Times New Roman')
     rFonts.set(qn('w:hAnsi'), 'Times New Roman')
 
+    # Encabezado: Espacio para el logo (Mismo formato que el archivo enviado)
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
 
@@ -58,19 +61,23 @@ def generar_word_oficial(texto, ciudad_tag):
     
     for linea in lineas:
         l_upper = linea.upper()
+        # Detección de inicio de sección
         if target in l_upper and any(prefix in l_upper for prefix in ["1.", "2.", "COCHABAMBA", "SANTA CRUZ"]):
             capturando = True
             continue
+        # Detección de fin de sección (cuando empieza la otra ciudad)
         other_target = "SANTA CRUZ" if target == "COCHABAMBA" else "COCHABAMBA"
         if capturando and other_target in l_upper and any(prefix in l_upper for prefix in ["1.", "2."]):
             capturando = False
 
         if capturando and linea.strip():
             p = doc.add_paragraph()
+            # TITULARES: Negrita y Mayúsculas (detecta asteriscos de la IA)
             if "*" in linea:
                 limpia = linea.replace('*', '').strip().upper()
                 run = p.add_run(limpia)
                 run.bold = True
+            # MEDIOS: Negrita (detecta nombres de medios conocidos)
             elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT", "INNOTICIAS", "ENFOQUE NEWS"]):
                 run = p.add_run(l_upper)
                 run.bold = True
@@ -86,10 +93,9 @@ def generar_word_oficial(texto, ciudad_tag):
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # CAMBIO REALIZADO: Solo el nombre del modelo para evitar el error 404
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # CORRECCIÓN AQUÍ: Se añade el prefijo 'models/' para evitar el error 404
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
         
-        # Mantenemos TU prompt exacto
         prompt = f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
@@ -124,7 +130,6 @@ if api_key:
     genai.configure(api_key=api_key)
     
     if st.button("🚀 INICIAR MONITOREO DE NOTICIAS (PASO 1 Y 2)"):
-        # Mantenemos TUS fuentes
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
             {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
@@ -150,13 +155,15 @@ if api_key:
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
-            st.success("Monitoreo completado.")
+            st.success("Monitoreo completado con filtros aplicados.")
         else:
-            st.warning("No se encontraron noticias relevantes.")
+            st.warning("No se encontraron noticias relevantes con los filtros actuales.")
 
     if st.session_state.reporte_final:
+        st.markdown("### VISTA PREVIA DEL REPORTE")
         st.markdown(f'<div style="background:white;color:black;padding:20px;border:1px solid #ccc;font-family:serif;">{st.session_state.reporte_final.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
         
+        st.subheader("💾 EXPORTAR DOCUMENTOS (Times New Roman 10pt)")
         c1, c2 = st.columns(2)
         with c1:
             st.download_button("Descargar Word COCHABAMBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
