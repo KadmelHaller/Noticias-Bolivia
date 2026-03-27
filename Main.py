@@ -7,14 +7,14 @@ import pytz
 import re
 from urllib.parse import urlparse
 
-st.set_page_config(page_title="Monitoreo Tributario Pro", page_icon="🇧🇴", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Monitoreo Tributario", page_icon="🇧🇴", layout="wide")
 
-# --- CONFIGURACIÓN DE TIEMPO ---
 zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_bonita = ahora.strftime('%d/%m/%Y')
 
-# Filtros de búsqueda enfocada en IMPUESTOS
+# Filtros enfocados
 TEMAS_OK = ["impuesto", "sin", "tribut", "factur", "fiscal", "recaudaci", "clausur", "presupuesto", "aduana", "econom", "dolar", "banco", "gobierno"]
 
 def es_relevante(texto, url):
@@ -62,7 +62,7 @@ def procesar_fuentes():
                         rn = requests.get(url, headers=headers, timeout=5)
                         s_n = BeautifulSoup(rn.text, 'html.parser')
                         parrafos = [p.get_text().strip() for p in s_n.find_all('p') if len(p.get_text()) > 60]
-                        txt_cuerpo = " ".join(parrafos[:2]) # Solo 2 párrafos para no saturar la IA
+                        txt_cuerpo = " ".join(parrafos[:2]) 
                         
                         if len(txt_cuerpo) > 50:
                             data_final += f"REGION: {f['r']} | MEDIO: {f['n']} | TITULAR: {titulo} | TXT: {txt_cuerpo[:400]} | LINK: {url}\n\n"
@@ -73,41 +73,53 @@ def procesar_fuentes():
     return data_final
 
 if api_key:
-    # CONFIGURACIÓN CRÍTICA PARA EVITAR ERROR 404
-    genai.configure(api_key=api_key)
+    # --- CORRECCIÓN DEFINITIVA DE IA ---
+    try:
+        genai.configure(api_key=api_key)
+    except Exception as e:
+        st.error(f"Error de configuración: {e}")
+
     if st.button('🚀 GENERAR REPORTE UNIFICADO'):
         with st.status("Procesando información...") as status:
             raw_data = procesar_fuentes()
+            
             if len(raw_data) > 50:
                 status.update(label="Redactando reporte final...", state="running")
                 try:
-                    # USAMOS EL IDENTIFICADOR DE MODELO COMPLETO
-                    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+                    # Usamos 'gemini-1.5-flash-latest' que es el alias más estable para evitar el 404
+                    model = genai.GenerativeModel(model_name='gemini-1.5-flash-latest')
                     
                     prompt = f"""
-                    FECHA DEL REPORTE: {fecha_hoy_bonita}.
-                    INSTRUCCIÓN OBLIGATORIA: Reemplaza cualquier término como 'Impuestos Municipales' o 'Impuestos Nacionales' por la palabra única 'IMPUESTOS'.
+                    FECHA: {fecha_hoy_bonita}. Eres un analista de prensa.
+                    REGLA DE ORO: Cambia 'Impuestos Municipales', 'Impuestos Nacionales' o cualquier variante a la palabra única 'IMPUESTOS'.
                     
-                    ORDEN DE SECCIONES:
+                    ESTRUCTURA:
                     1. COCHABAMBA
                     2. SANTA CRUZ
                     
-                    FORMATO POR NOTICIA:
+                    FORMATO:
                     **TITULAR EN MAYÚSCULAS**
                     **MEDIO EN MAYÚSCULAS**
-                    Resumen de 4 líneas enfocado en IMPUESTOS.
+                    Resumen técnico de 4 líneas enfocado en IMPUESTOS.
                     URL
                     """
                     
-                    # Llamada limpia sin parámetros de versión extraños
                     res = model.generate_content(prompt + "\n\nDATOS:\n" + raw_data)
                     
                     status.update(label="Reporte Completado", state="complete")
                     
-                    # Procesamiento de formato Markdown para Streamlit
+                    # Limpieza y visualización
                     processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                     st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Error técnico de IA: {e}")
+                    # Si falla el 'latest', intentamos con la ruta de sistema
+                    try:
+                        model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+                        res = model.generate_content(prompt + "\n\nDATOS:\n" + raw_data)
+                        status.update(label="Reporte Completado", state="complete")
+                        processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
+                        st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+                    except Exception as e2:
+                        st.error(f"Error técnico persistente: {e2}")
             else:
-                st.warning("No se detectaron noticias nuevas sobre impuestos en las portadas.")
+                st.warning("No se detectaron noticias nuevas sobre impuestos.")
