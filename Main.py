@@ -14,7 +14,7 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_bonita = ahora.strftime('%d/%m/%Y')
 
-# Filtros de búsqueda enfocada
+# Filtros de búsqueda enfocada en IMPUESTOS
 TEMAS_OK = ["impuesto", "sin", "tribut", "factur", "fiscal", "recaudaci", "clausur", "presupuesto", "aduana", "econom", "dolar", "banco", "gobierno"]
 
 def es_relevante(texto, url):
@@ -32,8 +32,7 @@ def procesar_fuentes():
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "UNITEL", "u": "https://unitel.bo/noticias/economia", "t": "TV", "r": "Nacional"},
-        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"},
-        {"n": "RRSS", "u": "https://www.google.com/search?q=site:facebook.com+impuestos+bolivia+2026", "t": "Influencer", "r": "Nacional"}
+        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"}
     ]
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
@@ -62,11 +61,10 @@ def procesar_fuentes():
                     try:
                         rn = requests.get(url, headers=headers, timeout=5)
                         s_n = BeautifulSoup(rn.text, 'html.parser')
-                        # Limpieza de párrafos para evitar que la IA se cuelgue
                         parrafos = [p.get_text().strip() for p in s_n.find_all('p') if len(p.get_text()) > 60]
-                        txt_cuerpo = " ".join(parrafos[:2]) # Solo 2 párrafos para máxima velocidad
+                        txt_cuerpo = " ".join(parrafos[:2]) # Solo 2 párrafos para no saturar la IA
                         
-                        if len(txt_cuerpo) > 50 or f['t'] == "Influencer":
+                        if len(txt_cuerpo) > 50:
                             data_final += f"REGION: {f['r']} | MEDIO: {f['n']} | TITULAR: {titulo} | TXT: {txt_cuerpo[:400]} | LINK: {url}\n\n"
                             vistos += 1
                     except: continue
@@ -75,7 +73,7 @@ def procesar_fuentes():
     return data_final
 
 if api_key:
-    # CONFIGURACIÓN DE SEGURIDAD PARA EVITAR ERROR 404
+    # CONFIGURACIÓN CRÍTICA PARA EVITAR ERROR 404
     genai.configure(api_key=api_key)
     if st.button('🚀 GENERAR REPORTE UNIFICADO'):
         with st.status("Procesando información...") as status:
@@ -83,28 +81,30 @@ if api_key:
             if len(raw_data) > 50:
                 status.update(label="Redactando reporte final...", state="running")
                 try:
-                    # USAMOS EL NOMBRE COMPLETO DEL MODELO PARA COMPATIBILIDAD TOTAL
+                    # USAMOS EL IDENTIFICADOR DE MODELO COMPLETO
                     model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
                     
                     prompt = f"""
                     FECHA DEL REPORTE: {fecha_hoy_bonita}.
-                    INSTRUCCIÓN OBLIGATORIA: Reemplaza cualquier término como 'Impuestos Municipales', 'Impuestos Nacionales' o 'Tributos' por la palabra única 'IMPUESTOS'.
+                    INSTRUCCIÓN OBLIGATORIA: Reemplaza cualquier término como 'Impuestos Municipales' o 'Impuestos Nacionales' por la palabra única 'IMPUESTOS'.
                     
-                    ESTRUCTURA:
-                    1. COCHABAMBA (Escritos, TV, Digital, RRSS)
-                    2. SANTA CRUZ (Escritos, TV, Digital, RRSS)
+                    ORDEN DE SECCIONES:
+                    1. COCHABAMBA
+                    2. SANTA CRUZ
                     
-                    FORMATO:
+                    FORMATO POR NOTICIA:
                     **TITULAR EN MAYÚSCULAS**
                     **MEDIO EN MAYÚSCULAS**
-                    Resumen de 4 líneas enfocado estrictamente en IMPUESTOS.
+                    Resumen de 4 líneas enfocado en IMPUESTOS.
                     URL
                     """
                     
+                    # Llamada limpia sin parámetros de versión extraños
                     res = model.generate_content(prompt + "\n\nDATOS:\n" + raw_data)
+                    
                     status.update(label="Reporte Completado", state="complete")
                     
-                    # Limpieza visual del reporte
+                    # Procesamiento de formato Markdown para Streamlit
                     processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                     st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
                 except Exception as e:
