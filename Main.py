@@ -77,4 +77,28 @@ if api_key:
                     
                     JERARQUÍA DE CONTENIDO:
                     1. IMPUESTOS (Prioridad Máxima. Cambia 'Municipales/Nacionales' a 'IMPUESTOS').
-                    2. GOBIER
+                    2. GOBIERNO (Noticias de gestión, ministros, presidencia).
+                    3. ECONOMÍA (Dólar, bancos, mercados).
+
+                    ESTRUCTURA DEL REPORTE:
+                    Organiza por 1. COCHABAMBA y 2. SANTA CRUZ.
+                    Dentro de cada ciudad, clasifica por: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Redes Sociales.
+                    
+                    CADA NOTICIA DEBE TENER:
+                    TITULAR (MAYUS), MEDIO (MAYUS), Resumen de 4 a 6 líneas, LINK.
+                    """
+                    
+                    res = model.generate_content(prompt + "\n\nNOTICIAS DETECTADAS:\n" + raw_data)
+                    status.update(label=f"Reporte Finalizado con {modelo_final}", state="complete")
+                    
+                    st.markdown(f'''
+                    <div style="background: white; color: black; padding: 30px; border: 1px solid #ddd; font-family: 'Times New Roman', serif; text-align: justify; line-height: 1.6;">
+                        <h1 style="text-align: center; color: #1a3c5a;">REPORTE ESTRATÉGICO DIARIO</h1>
+                        <hr>
+                        {res.text.replace("\n", "<br>")}
+                    </div>
+                    ''', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error de conexión con la IA: {e}")
+            else:
+                st.warning("No se hallaron suficientes noticias. Intenta ampliar los términos de búsqueda.")
