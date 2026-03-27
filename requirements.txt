@@ -1,5 +1,5 @@
-streamlit
+google-generativeai
 requests
 beautifulsoup4
-google-generativeai
 pytz
+python-docx
