@@ -55,20 +55,33 @@ def scraping_funcional(fuentes):
     return acumulado
 
 def procesar_ia(datos_prensa, datos_rrss):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = f"""
-    FECHA: {fecha_hoy}.
-    TAREA: Reporte unificado de prensa y redes sociales.
-    INSTRUCCIONES CRÍTICAS:
-    1. TITULARES: Usa el texto EXACTO de la fuente, siempre en MAYÚSCULAS.
-    2. PERSONAS: Identifica nombres y cargos. Escríbelos EXACTAMENTE como aparecen.
-    3. RRSS: Integra las publicaciones dentro de la ciudad (Cochabamba o Santa Cruz) que corresponda.
-    4. FORMATO: *TITULAR EXACTO* (un solo asterisco antes y después). En la línea de abajo el MEDIO. Luego resumen de 5 líneas y link.
-    5. ESTRUCTURA: Solo dos secciones: 1. COCHABAMBA y 2. SANTA CRUZ.
-    """
-    contenido = f"PRENSA Y DIGITAL:\n{datos_prensa}\n\nREDES SOCIALES:\n{datos_rrss}"
-    res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + contenido)
-    return res.text
+    try:
+        # Intentamos con el nombre técnico completo del modelo
+        model_name = 'models/gemini-1.5-flash' 
+        model = genai.GenerativeModel(model_name)
+        
+        prompt = f"""
+        FECHA: {fecha_hoy}.
+        TAREA: Reporte unificado de prensa y redes sociales.
+        INSTRUCCIONES CRÍTICAS:
+        1. TITULARES: Usa el texto EXACTO de la fuente, siempre en MAYÚSCULAS.
+        2. PERSONAS: Identifica nombres y cargos. Escríbelos EXACTAMENTE como aparecen.
+        3. RRSS: Integra las publicaciones dentro de la ciudad (Cochabamba o Santa Cruz) que corresponda.
+        4. FORMATO: *TITULAR EXACTO* (un solo asterisco antes y después). En la línea de abajo el MEDIO en negrita. Luego resumen de 5 líneas y link.
+        5. ESTRUCTURA: Solo dos secciones: 1. COCHABAMBA y 2. SANTA CRUZ.
+        """
+        contenido = f"PRENSA Y DIGITAL:\n{datos_prensa}\n\nREDES SOCIALES:\n{datos_rrss}"
+        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + contenido)
+        return res.text
+    except Exception as e:
+        # Si el modelo específico falla, intentamos listar y usar el primero disponible
+        try:
+            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            fallback_model = genai.GenerativeModel(available_models[0])
+            res = fallback_model.generate_content(prompt + "\n\nDATOS:\n" + contenido)
+            return res.text
+        except:
+            return f"Error crítico de conexión con la IA: {str(e)}"
 
 def generar_word_oficial(texto, ciudad_tag):
     doc = Document()
