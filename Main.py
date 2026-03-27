@@ -16,12 +16,11 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Keywords optimizadas para reducir el volumen de datos enviados
-KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia", "presupuesto", "hacienda"]
+KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia", "presupuesto"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Interlineado 0 y Links Azules) ---
+# --- 2. FUNCIONES DE WORD (Interlineado 0 y Links Azules) ---
 
 def añadir_hipervinculo(paragraph, url):
     part = paragraph.part
@@ -52,11 +51,7 @@ def generar_word_oficial(texto, ciudad_tag):
     section.header.paragraphs[0].add_run("\n\n")
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
-    
-    ahora = datetime.now(zona_horaria)
-    hm = ahora.hour * 100 + ahora.minute
-    envio = "1er Envío" if 830 <= hm <= 930 else "2do Envío" if 1330 <= hm <= 1430 else "3er Envío" if 1530 <= hm <= 1630 else "Envío Extraordinario"
-    doc.add_paragraph(envio)
+    doc.add_paragraph("Reporte Estratégico")
     doc.add_paragraph("")
 
     target = "COCHABAMBA" if ciudad_tag == "CBBA" else "SANTA CRUZ"
@@ -86,30 +81,23 @@ def generar_word_oficial(texto, ciudad_tag):
                     p.add_run(linea)
     bio = BytesIO(); doc.save(bio); return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA (Filtrado previo para evitar 429) ---
+# --- 3. PROCESAMIENTO E IA POR LOTES (Anti-429) ---
 
-def procesar_ia_robusta(datos_filtrados):
+def llamar_ia_segura(datos_batch):
     try:
-        # Buscamos el modelo disponible
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         target_model = next((m for m in modelos if "flash" in m), modelos[0])
         model = genai.GenerativeModel(target_model)
         
-        prompt = f"""
-        FECHA: {fecha_hoy}. 
-        IMPORTANTE: Solo incluye noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO.
-        ESTRUCTURA: 1. COCHABAMBA, 2. SANTA CRUZ. 
-        FORMATO: *TITULAR EN MAYÚSCULAS*, MEDIO, Resumen 5 líneas, Enlace directo.
-        No incluyas noticias irrelevantes.
-        """
+        prompt = f"FECHA: {fecha_hoy}. Resume estas noticias de BOLIVIA para un reporte de IMPUESTOS/ECONOMÍA. Formato: *TITULAR*, MEDIO, Resumen 5 líneas, Enlace. Clasifica en 1. COCHABAMBA o 2. SANTA CRUZ."
         
-        # Enviamos solo los datos que pasaron el filtro previo
-        res = model.generate_content(prompt + "\n\nDATOS FILTRADOS:\n" + datos_filtrados)
+        res = model.generate_content(prompt + "\n\nNOTICIAS:\n" + datos_batch)
         return res.text
     except Exception as e:
         if "429" in str(e):
-            return "Error: Exceso de cuota. Espera 1 minuto y reintenta."
-        return f"Error en la IA: {str(e)}"
+            time.sleep(20) # Pausa si hay saturación
+            return llamar_ia_segura(datos_batch) # Reintenta una vez
+        return ""
 
 # --- 4. INTERFAZ ---
 
@@ -124,28 +112,37 @@ if api_key:
             {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
             {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
             {"n": "LA VOZ DIGITAL", "u": "https://lavoz.digital/", "r": "Santa Cruz"},
-            {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"},
-            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"}
+            {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
         ]
         
-        datos_limpios = ""
-        for f in fuentes:
+        reporte_acumulado = ""
+        progreso = st.progress(0)
+        
+        for idx, f in enumerate(fuentes):
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
-                # Filtro agresivo antes de mandar a la IA
+                noticias_medio = ""
+                
                 for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
                     tit = el.get_text().strip()
                     if len(tit) > 35 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        datos_limpios += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {tit}\n"
+                        noticias_medio += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {tit}\n"
+                
+                if noticias_medio:
+                    # Procesamos cada medio de forma independiente para no saturar la cuota
+                    resultado_parcial = llamar_ia_segura(noticias_medio)
+                    reporte_acumulado += resultado_parcial + "\n\n"
+                    time.sleep(2) # Pausa de seguridad entre llamadas
             except: continue
+            progreso.progress((idx + 1) / len(fuentes))
         
-        if datos_limpios:
-            st.session_state.reporte_final = procesar_ia_robusta(datos_limpios)
+        if reporte_acumulado:
+            st.session_state.reporte_final = reporte_acumulado
             st.success("Completado.")
-            st.text_area("Reporte:", st.session_state.reporte_final, height=300)
+            st.text_area("Reporte:", st.session_state.reporte_final, height=400)
         else:
-            st.warning("No se hallaron noticias que coincidan con los filtros.")
+            st.warning("No se hallaron noticias hoy.")
 
     if st.session_state.reporte_final:
         c1, c2 = st.columns(2)
