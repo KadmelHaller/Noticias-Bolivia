@@ -5,24 +5,21 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 import os
-import time
 from io import BytesIO
-from urllib.parse import urlparse
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt
 from docx.oxml.ns import qn
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
+KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN ---
+# --- 2. FUNCIONES DE EXPORTACIÓN (Times New Roman 10pt) ---
 
 def obtener_info_envio():
     ahora = datetime.now(zona_horaria)
@@ -39,12 +36,12 @@ def generar_word_oficial(texto, ciudad_tag):
     font.name = 'Times New Roman'
     font.size = Pt(10)
     
-    # Forzar Times New Roman en el XML
+    # Forzar Times New Roman
     rFonts = style.element.rPr.rFonts
     rFonts.set(qn('w:ascii'), 'Times New Roman')
     rFonts.set(qn('w:hAnsi'), 'Times New Roman')
 
-    # Encabezado: Espacio para el logo
+    # Encabezado: Espacio para el logo (Mantenemos las 2 líneas vacías como el original)
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
 
@@ -60,24 +57,20 @@ def generar_word_oficial(texto, ciudad_tag):
     for linea in lineas:
         l_upper = linea.upper().strip()
         
-        # Lógica de detección de secciones mejorada
-        if target in l_upper and any(p in l_upper for p in ["1.", "2.", "SECCIÓN"]):
+        # Detección de sección (Busca el nombre de la ciudad con el número)
+        if target in l_upper and any(p in l_upper for p in ["1.", "2."]):
             capturando = True
             continue
-        
-        # Si capturamos y llegamos a la siguiente sección numérica, paramos
+        # Detener si empieza la otra sección numérica
         if capturando and any(p in l_upper for p in ["1.", "2."]) and target not in l_upper:
             capturando = False
 
         if capturando and linea.strip():
             p = doc.add_paragraph()
-            # TITULARES
-            if "*" in linea:
-                limpia = linea.replace('*', '').strip().upper()
-                run = p.add_run(limpia)
+            if "*" in linea: # Titulares
+                run = p.add_run(linea.replace('*', '').upper())
                 run.bold = True
-            # MEDIOS
-            elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT"]):
+            elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS"]):
                 run = p.add_run(l_upper)
                 run.bold = True
             else:
@@ -88,36 +81,40 @@ def generar_word_oficial(texto, ciudad_tag):
     doc.save(bio)
     return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA ---
+# --- 3. PROCESAMIENTO E IA (Detección automática de modelo) ---
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # Cambiado a 'gemini-1.5-flash' para mayor compatibilidad
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Intentamos listar modelos para usar el que esté disponible (evita el error 404)
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Preferimos gemini-1.5-flash si existe, sino el primero de la lista
+        best_model = next((m for m in available_models if "1.5-flash" in m), available_models[0])
+        
+        model = genai.GenerativeModel(best_model)
         prompt = f"""
         FECHA: {fecha_hoy}. 
-        IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS, ECONOMÍA y GOBIERNO. 
-        Ignora cultura, tecnología, internacionales o deportes.
+        SOLO noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO. 
+        Ignora cultura, deportes o tecnología internacional.
 
-        ESTRUCTURA OBLIGATORIA:
+        ESTRUCTURA:
         1. COCHABAMBA
-        (Incluye noticias de Opinión, Los Tiempos, Enfoque News y nacionales de Cbba)
+        (Noticias locales y nacionales que afecten a Cbba)
 
         2. SANTA CRUZ
-        (Incluye noticias de El Deber, La Voz Digital, Visión 360 y nacionales de SCZ)
+        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a SCZ)
 
-        FORMATO POR NOTICIA:
-        *TITULAR EXACTO EN MAYÚSCULAS*
-        NOMBRE DEL MEDIO EN MAYÚSCULAS
+        FORMATO:
+        *TITULAR EN MAYÚSCULAS*
+        MEDIO EN MAYÚSCULAS
         Resumen de 5 líneas con nombres y cargos exactos.
-        Enlace directo en minúsculas.
+        Link directo.
 
-        Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. No uses negritas de markdown (**).
+        Regla: No uses negritas de markdown (**), usa un solo asterisco (*) para titulares.
         """
-        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
+        res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_raw)
         return res.text
     except Exception as e:
-        return f"Error en la IA: {str(e)}"
+        return f"Error en la conexión con Google: {str(e)}"
 
 # --- 4. INTERFAZ ---
 
@@ -127,46 +124,41 @@ api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 if api_key:
     genai.configure(api_key=api_key)
     
-    if st.button("🚀 INICIAR MONITOREO DE NOTICIAS"):
+    if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
             {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
             {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
             {"n": "LA VOZ DIGITAL", "u": "https://lavoz.digital/", "r": "Santa Cruz"},
             {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"},
-            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
-            {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"}
+            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"}
         ]
         
         datos_crudos = ""
-        progress_text = st.empty()
         pb = st.progress(0)
-        
         for i, f in enumerate(fuentes):
-            progress_text.text(f"Escaneando: {f['n']}...")
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
-                for el in soup.find_all(['h1', 'h2', 'h3', 'h4']):
+                for el in soup.find_all(['h1', 'h2', 'h3']):
                     tit = el.get_text().strip()
                     if len(tit) > 30 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
+                        datos_crudos += f"FUENTE: {f['n']} | REGIÓN: {f['r']} | TEMA: {tit}\n"
             except: continue
             pb.progress((i + 1) / len(fuentes))
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
-            st.success("Monitoreo completado.")
+            st.success("Monitoreo finalizado.")
         else:
             st.warning("No se hallaron noticias con los filtros actuales.")
 
     if st.session_state.reporte_final:
-        st.markdown("### VISTA PREVIA")
         st.markdown(f'<div style="background:white;color:black;padding:20px;border:1px solid #ccc;font-family:serif;">{st.session_state.reporte_final.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
         
         st.subheader("💾 EXPORTAR")
         c1, c2 = st.columns(2)
         with c1:
-            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Word COCHABAMBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
         with c2:
-            st.download_button("Descargar Word STACRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_STACRUZ_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Word SANTA CRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
