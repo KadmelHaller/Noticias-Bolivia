@@ -14,17 +14,15 @@ zona_horaria = pytz.timezone('America/La_Paz')
 ahora = datetime.now(zona_horaria)
 fecha_hoy_bonita = ahora.strftime('%d/%m/%Y')
 
-# --- FILTROS DE BÚSQUEDA (DIRECTO A IMPUESTOS) ---
-# Se eliminaron términos específicos para priorizar la búsqueda general de Impuestos
-TEMAS_OK = ["impuestos", "sin", "tributaria", "facturación", "aduana", "economía", "fiscal", "recaudación"]
+# Filtros de búsqueda enfocada
+TEMAS_OK = ["impuesto", "sin", "tribut", "factur", "fiscal", "recaudaci", "clausur", "presupuesto", "aduana", "econom", "dolar", "banco", "gobierno"]
 
 def es_relevante(texto, url):
     txt = (texto + url).lower()
-    # Excluimos años pasados para asegurar actualidad
     if any(old in txt for old in ["2021", "2022", "2023"]): return False
     return any(t in txt for t in TEMAS_OK)
 
-st.title(f"📰 MONITOREO DE IMPUESTOS: {fecha_hoy_bonita}")
+st.title(f"📰 MONITOREO TRIBUTARIO: {fecha_hoy_bonita}")
 api_key = st.sidebar.text_input("Pega tu Gemini API Key:", type="password")
 
 def procesar_fuentes():
@@ -34,8 +32,8 @@ def procesar_fuentes():
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "t": "Escrito", "r": "Santa Cruz"},
         {"n": "UNITEL", "u": "https://unitel.bo/noticias/economia", "t": "TV", "r": "Nacional"},
-        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/", "t": "Digital", "r": "Nacional"},
-        {"n": "RRSS", "u": "https://www.google.com/search?q=site:facebook.com+OR+site:x.com+impuestos+bolivia+2026", "t": "Influencer", "r": "Nacional"}
+        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "t": "Digital", "r": "Nacional"},
+        {"n": "RRSS", "u": "https://www.google.com/search?q=site:facebook.com+impuestos+bolivia+2026", "t": "Influencer", "r": "Nacional"}
     ]
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
@@ -55,58 +53,61 @@ def procesar_fuentes():
                 url_raw = l['href']
                 url = url_raw if url_raw.startswith('http') else urlparse(f['u']).scheme + "://" + urlparse(f['u']).netloc + "/" + url_raw.lstrip('/')
                 
-                if "google.com/search" in url or len(url) < 30: continue
+                if "google.com" in url or len(url) < 35: continue
                 
                 titulo = l.get_text().strip()
                 if len(titulo) < 30: continue
 
                 if es_relevante(titulo, url):
                     try:
-                        # EXTRACCIÓN PROFUNDA (Solo para medios, no para RRSS)
-                        if f['t'] != "Influencer":
-                            rn = requests.get(url, headers=headers, timeout=5)
-                            s_n = BeautifulSoup(rn.text, 'html.parser')
-                            # Extraemos párrafos con contenido real
-                            parrafos = [p.get_text().strip() for p in s_n.find_all('p') if len(p.get_text()) > 50]
-                            txt_cuerpo = " ".join(parrafos[:3]) # Limitamos a 3 párrafos para no colgar la IA
-                        else:
-                            txt_cuerpo = "Publicación en Redes Sociales sobre impuestos."
+                        rn = requests.get(url, headers=headers, timeout=5)
+                        s_n = BeautifulSoup(rn.text, 'html.parser')
+                        # Limpieza de párrafos para evitar que la IA se cuelgue
+                        parrafos = [p.get_text().strip() for p in s_n.find_all('p') if len(p.get_text()) > 60]
+                        txt_cuerpo = " ".join(parrafos[:2]) # Solo 2 párrafos para máxima velocidad
                         
-                        if len(txt_cuerpo) > 40:
-                            data_final += f"REGION: {f['r']} | MEDIO: {f['n']} | TITULAR: {titulo} | RESUMEN_RAW: {txt_cuerpo[:600]} | LINK: {url}\n\n"
+                        if len(txt_cuerpo) > 50 or f['t'] == "Influencer":
+                            data_final += f"REGION: {f['r']} | MEDIO: {f['n']} | TITULAR: {titulo} | TXT: {txt_cuerpo[:400]} | LINK: {url}\n\n"
                             vistos += 1
                     except: continue
-                if vistos >= 5: break 
+                if vistos >= 4: break 
         except: continue
     return data_final
 
 if api_key:
+    # CONFIGURACIÓN DE SEGURIDAD PARA EVITAR ERROR 404
     genai.configure(api_key=api_key)
-    if st.button('🚀 GENERAR REPORTE INTEGRAL'):
+    if st.button('🚀 GENERAR REPORTE UNIFICADO'):
         with st.status("Procesando información...") as status:
             raw_data = procesar_fuentes()
-            if len(raw_data) > 100:
+            if len(raw_data) > 50:
                 status.update(label="Redactando reporte final...", state="running")
                 try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    # USAMOS EL NOMBRE COMPLETO DEL MODELO PARA COMPATIBILIDAD TOTAL
+                    model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+                    
                     prompt = f"""
-                    FECHA: {fecha_hoy_bonita}. Eres un analista de prensa experto.
-                    Tu objetivo es reportar noticias sobre IMPUESTOS en Bolivia.
+                    FECHA DEL REPORTE: {fecha_hoy_bonita}.
+                    INSTRUCCIÓN OBLIGATORIA: Reemplaza cualquier término como 'Impuestos Municipales', 'Impuestos Nacionales' o 'Tributos' por la palabra única 'IMPUESTOS'.
                     
-                    ORGANIZACIÓN:
-                    1. COCHABAMBA (Escritos, TV, Digital, RRSS).
-                    2. SANTA CRUZ (Escritos, TV, Digital, RRSS).
+                    ESTRUCTURA:
+                    1. COCHABAMBA (Escritos, TV, Digital, RRSS)
+                    2. SANTA CRUZ (Escritos, TV, Digital, RRSS)
                     
-                    INSTRUCCIONES:
-                    - Usa el término general 'IMPUESTOS' para categorizar la información.
-                    - Formato: TITULAR (MAYÚSCULAS), MEDIO (MAYÚSCULAS), resumen ejecutivo de 4-5 líneas y el LINK.
-                    - Si la noticia es de Redes Sociales, indica el tipo de tendencia.
+                    FORMATO:
+                    **TITULAR EN MAYÚSCULAS**
+                    **MEDIO EN MAYÚSCULAS**
+                    Resumen de 4 líneas enfocado estrictamente en IMPUESTOS.
+                    URL
                     """
-                    res = model.generate_content([prompt, raw_data])
+                    
+                    res = model.generate_content(prompt + "\n\nDATOS:\n" + raw_data)
                     status.update(label="Reporte Completado", state="complete")
+                    
+                    # Limpieza visual del reporte
                     processed = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res.text)
                     st.markdown(f'<div style="font-family:serif; font-size:13.3px; text-align:justify; background:white; color:black; padding:25px; border:1px solid #ccc;">{processed.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Error en el análisis final: {e}")
+                    st.error(f"Error técnico de IA: {e}")
             else:
-                st.warning("No se encontraron noticias recientes sobre Impuestos en las portadas revisadas.")
+                st.warning("No se detectaron noticias nuevas sobre impuestos en las portadas.")
