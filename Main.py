@@ -40,7 +40,7 @@ def scraping_limpio(fuentes):
                 url = link['href']
                 if not url.startswith('http'):
                     base = urlparse(f['u']).scheme + "://" + urlparse(f['u']).netloc
-                    url = base + "/" + url.lstrip('/')
+                    url = base + "/" + url_raw.lstrip('/')
                 
                 if len(tit) > 25 and any(k in (tit + url).lower() for k in KEYWORDS):
                     datos += f"ORIGEN_FUENTE: {f['n']} | CIUDAD_MEDIO: {f['r']} | INFO: {tit} | LINK: {url}\n\n"
@@ -55,20 +55,22 @@ def procesar_reporte(datos_raw, es_rrss=False):
         
         tipo_fuente = "REDES SOCIALES" if es_rrss else "PRENSA Y TV"
         
+        # --- AJUSTE DE PROMPT ---
         prompt = f"""
         FECHA: {fecha_hoy}. FUENTES: {tipo_fuente}.
         PRIORIDAD TEMÁTICA: 1. IMPUESTOS (unificar), 2. GOBIERNO, 3. ECONOMÍA.
 
         ESTRUCTURA OBLIGATORIA:
-        1. COCHABAMBA (Incluir aquí periódicos de Cbba y noticias de TV que hablen de Cbba).
-        2. SANTA CRUZ (Incluir aquí periódicos de SCZ y noticias de TV que hablen de SCZ).
+        1. COCHABAMBA (Incluir periódicos de Cbba y noticias de TV que hablen de Cbba).
+        2. SANTA CRUZ (Incluir periódicos de SCZ y noticias de TV que hablen de SCZ).
 
         FORMATO DE SALIDA (ESTRICTO):
-        **TITULAR EN MAYÚSCULAS** - **NOMBRE DEL MEDIO**
+        *TITULAR EN MAYÚSCULAS*
+        NOMBRE DEL MEDIO EN MAYÚSCULAS
         Texto del resumen de 5 líneas sin etiquetas previas, analizando el impacto.
         Enlace directo aquí.
 
-        PROHIBICIONES: No uses palabras como 'Resumen:', 'URL:', 'Título:' o 'Link:'. La información debe ser directa.
+        PROHIBICIONES: No uses palabras como 'Resumen:', 'URL:', 'Título:', 'Link:' ni dos asteriscos (**). Usa solo UN asterisco (*) antes y después del titular. El nombre del medio debe ir obligatoriamente en la línea de abajo del titular. La información debe ser directa.
         """
         res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
         return res.text
@@ -122,7 +124,6 @@ if api_key:
     # --- SALIDA ---
     if st.session_state.reporte_medios:
         st.subheader("📰 REPORTE DE PRENSA Y TELEVISIÓN")
-        # El reemplazo de asteriscos por <b> ayuda a que Streamlit renderice negritas correctamente
         res_html = st.session_state.reporte_medios.replace("\n", "<br>")
         st.markdown(f'<div style="background: white; color: black; padding: 25px; border: 1px solid #ccc; font-family: serif; text-align: justify;">{res_html}</div>', unsafe_allow_html=True)
 
