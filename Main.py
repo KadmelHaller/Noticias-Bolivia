@@ -15,14 +15,14 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Ampliamos levemente para que no salga vacío si el medio usa sinónimos
-KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia", "presupuesto"]
+KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN ---
+# --- 2. FUNCIONES DE EXPORTACIÓN (Word Exacto) ---
 
 def añadir_hipervinculo(paragraph, url):
+    """Crea un enlace funcional, azul y subrayado"""
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
@@ -52,11 +52,14 @@ def generar_word_oficial(texto, ciudad_tag):
     font = style.font
     font.name = 'Times New Roman'
     font.size = Pt(10)
+    
+    # INTERLINEADO Y ESPACIADO CERO ABSOLUTO
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
 
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
+
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
     doc.add_paragraph(obtener_info_envio())
@@ -78,22 +81,33 @@ def generar_word_oficial(texto, ciudad_tag):
             if "HTTP" in linea.upper():
                 p = doc.add_paragraph()
                 añadir_hipervinculo(p, linea.strip())
-                doc.add_paragraph("") 
+                doc.add_paragraph("") # Salto de línea simple entre noticias
             else:
                 p = doc.add_paragraph()
                 if "*" in linea:
-                    run = p.add_run(linea.replace('*', '').strip().upper()); run.bold = True
+                    run = p.add_run(linea.replace('*', '').strip().upper())
+                    run.bold = True
                 elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS"]):
-                    run = p.add_run(l_upper); run.bold = True
+                    run = p.add_run(l_upper)
+                    run.bold = True
                 else:
                     p.add_run(linea)
-    bio = BytesIO(); doc.save(bio); return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA ---
+    bio = BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
+
+# --- 3. PROCESAMIENTO E IA (Solución 404 Definitiva) ---
 
 def procesar_ia_robusta(datos_raw):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # DETECCIÓN AUTOMÁTICA DE MODELO DISPONIBLE
+        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Priorizar flash para evitar cuotas, sino el primero que haya
+        target_model = next((m for m in modelos if "flash" in m), modelos[0])
+        
+        model = genai.GenerativeModel(target_model)
+        
         prompt = f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
@@ -101,18 +115,16 @@ def procesar_ia_robusta(datos_raw):
 
         ESTRUCTURA OBLIGATORIA:
         1. COCHABAMBA
-        (Noticias de medios de Cbba como Opinión, Los Tiempos, Innoticias, Urgente.bo, Enfoque News y nacionales que afecten a Cochabamba)
+        (Noticias de medios de Cbba como Opinión, Los Tiempos e Innoticias)
 
         2. SANTA CRUZ
-        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a Santa Cruz)
+        (Noticias de El Deber, El Mundo, La Voz Digital y Visión 360)
 
         FORMATO POR NOTICIA:
         *TITULAR EXACTO EN MAYÚSCULAS*
         NOMBRE DEL MEDIO EN MAYÚSCULAS
-        Resumen de 5 líneas con nombres y cargos exactos. Sin etiquetas.
-        Enlace sin etiqueta, directo, en minúsculas.
-
-        Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. 
+        Resumen de 5 líneas con nombres y cargos exactos.
+        Enlace directo en la última línea.
         """
         res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
         return res.text
@@ -126,6 +138,7 @@ api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
+    
     if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
@@ -141,24 +154,23 @@ if api_key:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
-                # Buscamos en encabezados y en enlaces de noticias
+                # Buscamos en títulos y enlaces
                 for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
                     tit = el.get_text().strip()
-                    link = el.get('href', '')
                     if len(tit) > 35 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        # Intentar reconstruir el link si es relativo
-                        full_link = link if link.startswith('http') else f.get('u').rstrip('/') + link
-                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit} | LINK: {full_link}\n"
+                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
             except: continue
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
             st.success("Monitoreo finalizado.")
-            st.markdown(st.session_state.reporte_final) # Muestra el texto para confirmar que la IA respondió
+            st.text_area("Vista previa:", st.session_state.reporte_final, height=200)
         else:
-            st.warning("No se hallaron noticias. Intenta relajando más las Keywords.")
+            st.warning("No se hallaron noticias. Verifica la conexión.")
 
     if st.session_state.reporte_final:
         c1, c2 = st.columns(2)
-        with c1: st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
-        with c2: st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
+        with c1:
+            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+        with c2:
+            st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
