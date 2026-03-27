@@ -15,21 +15,20 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
+# Ampliamos levemente para que no salga vacío si el medio usa sinónimos
+KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia", "presupuesto"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Formato Estricto) ---
+# --- 2. FUNCIONES DE EXPORTACIÓN ---
 
 def añadir_hipervinculo(paragraph, url):
-    """Crea un enlace funcional, azul y subrayado"""
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
     hyperlink.set(qn('r:id'), r_id)
     new_run = docx.oxml.shared.OxmlElement('w:r')
     rPr = docx.oxml.shared.OxmlElement('w:rPr')
-    # Color azul y subrayado
     c = docx.oxml.shared.OxmlElement('w:color'); c.set(qn('w:val'), '0000FF')
     u = docx.oxml.shared.OxmlElement('w:u'); u.set(qn('w:val'), 'single')
     rPr.append(c); rPr.append(u)
@@ -53,14 +52,11 @@ def generar_word_oficial(texto, ciudad_tag):
     font = style.font
     font.name = 'Times New Roman'
     font.size = Pt(10)
-    
-    # INTERLINEADO Y ESPACIADO CERO
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
 
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
-
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
     doc.add_paragraph(obtener_info_envio())
@@ -82,29 +78,22 @@ def generar_word_oficial(texto, ciudad_tag):
             if "HTTP" in linea.upper():
                 p = doc.add_paragraph()
                 añadir_hipervinculo(p, linea.strip())
-                doc.add_paragraph("") # Salto simple entre noticias
+                doc.add_paragraph("") 
             else:
                 p = doc.add_paragraph()
                 if "*" in linea:
-                    run = p.add_run(linea.replace('*', '').strip().upper())
-                    run.bold = True
+                    run = p.add_run(linea.replace('*', '').strip().upper()); run.bold = True
                 elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS"]):
-                    run = p.add_run(l_upper)
-                    run.bold = True
+                    run = p.add_run(l_upper); run.bold = True
                 else:
                     p.add_run(linea)
-
-    bio = BytesIO()
-    doc.save(bio)
-    return bio.getvalue()
+    bio = BytesIO(); doc.save(bio); return bio.getvalue()
 
 # --- 3. PROCESAMIENTO E IA ---
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # CORRECCIÓN: Se usa el nombre del modelo sin prefijos conflictivos
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
         prompt = f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
@@ -137,7 +126,6 @@ api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
-    
     if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
@@ -153,21 +141,24 @@ if api_key:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
-                for el in soup.find_all(['h1', 'h2', 'h3']):
+                # Buscamos en encabezados y en enlaces de noticias
+                for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
                     tit = el.get_text().strip()
-                    if len(tit) > 30 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
+                    link = el.get('href', '')
+                    if len(tit) > 35 and any(k in tit.lower() for k in KEYWORDS_STRICT):
+                        # Intentar reconstruir el link si es relativo
+                        full_link = link if link.startswith('http') else f.get('u').rstrip('/') + link
+                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit} | LINK: {full_link}\n"
             except: continue
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
             st.success("Monitoreo finalizado.")
+            st.markdown(st.session_state.reporte_final) # Muestra el texto para confirmar que la IA respondió
         else:
-            st.warning("No se hallaron noticias con los filtros actuales.")
+            st.warning("No se hallaron noticias. Intenta relajando más las Keywords.")
 
     if st.session_state.reporte_final:
         c1, c2 = st.columns(2)
-        with c1:
-            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
-        with c2:
-            st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
+        with c1: st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+        with c2: st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
