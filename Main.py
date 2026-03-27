@@ -93,10 +93,21 @@ def generar_word_oficial(texto, ciudad_tag):
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # CORRECCIÓN AQUÍ: Se añade el prefijo 'models/' para evitar el error 404
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
-        
-        prompt = f"""
+        # CAMBIO CLAVE: Se usa el nombre del modelo sin prefijos y se maneja la excepción
+        # Si falla el 1.5-flash, intentará con gemini-pro que es más estable en v1beta
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            res = model.generate_content(tu_prompt_logic(datos_raw))
+        except:
+            model = genai.GenerativeModel('gemini-pro')
+            res = model.generate_content(tu_prompt_logic(datos_raw))
+            
+        return res.text
+    except Exception as e:
+        return f"Error en la IA: {str(e)}"
+
+def tu_prompt_logic(datos_raw):
+    return f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
         Ignora cultura, tecnología, internacionales o deportes.
@@ -115,11 +126,7 @@ def procesar_ia_robusta(datos_raw):
         Enlace sin etiqueta, directo, en minúsculas.
 
         Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. 
-        """
-        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
-        return res.text
-    except Exception as e:
-        return f"Error en la IA: {str(e)}"
+        \n\nDATOS RECOPILADOS:\n{datos_raw}"""
 
 # --- 4. INTERFAZ ---
 
