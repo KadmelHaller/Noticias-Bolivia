@@ -96,12 +96,16 @@ def procesar_ia_robusta(datos_raw):
         SOLO noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO. 
         Ignora cultura, deportes o tecnología internacional.
 
-        ESTRUCTURA:
+        ESTRUCTURA OBLIGATORIA:
+
         1. COCHABAMBA
-        (Noticias locales y nacionales que afecten a Cbba)
+
+        (Noticias de medios de Cbba como Opinión, Los Tiempos, Innoticias, Urgente.bo, Enfoque News y nacionales que afecten a Cochabamba)
+
 
         2. SANTA CRUZ
-        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a SCZ)
+
+        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a Santa Cruz) 
 
         FORMATO:
         *TITULAR EN MAYÚSCULAS*
