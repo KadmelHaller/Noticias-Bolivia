@@ -13,40 +13,28 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", page_icon="🇧�
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# PRIORIDADES DE BÚSQUEDA (1. Impuestos, 2. Gobierno, 3. Economía)
+# Prioridades: 1. Impuestos, 2. Gobierno, 3. Economía
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "estado", "economia", "dolar", "banco", "crisis"]
 
-st.title(f"🔍 MONITOREO 24H: {fecha_hoy}")
-st.markdown("### Prioridad: 1. Impuestos | 2. Gobierno | 3. Economía")
+# --- ESTADO DE SESIÓN PARA PERSISTENCIA ---
+if 'reporte_medios' not in st.session_state:
+    st.session_state.reporte_medios = ""
+if 'reporte_rrss' not in st.session_state:
+    st.session_state.reporte_rrss = ""
+
+st.title(f"🔍 MONITOR ESTRATÉGICO BOLIVIA: {fecha_hoy}")
+
 api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
-def extraer_noticias():
-    fuentes = [
-        # COCHABAMBA
-        {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/ultimas-noticias", "r": "Cochabamba", "t": "Escrito"},
-        {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba", "t": "Escrito"},
-        # SANTA CRUZ
-        {"n": "EL DEBER", "u": "https://eldeber.com.bo/economia", "r": "Santa Cruz", "t": "Escrito"},
-        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz", "t": "Escrito"},
-        # TV Y DIGITAL
-        {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional", "t": "TV"},
-        {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "r": "Nacional", "t": "Digital"},
-        # RRSS - LAS 4 BÚSQUEDAS (DISCOS)
-        {"n": "FB/X CBBA", "u": "https://www.google.com/search?q=impuestos+Cochabamba+site:facebook.com+OR+site:x.com", "r": "Cochabamba", "t": "Redes Sociales"},
-        {"n": "IG/TK CBBA", "u": "https://www.google.com/search?q=impuestos+Cochabamba+site:instagram.com+OR+site:tiktok.com", "r": "Cochabamba", "t": "Redes Sociales"},
-        {"n": "FB/X SCZ", "u": "https://www.google.com/search?q=impuestos+Santa+Cruz+site:facebook.com+OR+site:x.com", "r": "Santa Cruz", "t": "Redes Sociales"},
-        {"n": "IG/TK SCZ", "u": "https://www.google.com/search?q=impuestos+Santa+Cruz+site:instagram.com+OR+site:tiktok.com", "r": "Santa Cruz", "t": "Redes Sociales"}
-    ]
-
+def scraping_generico(lista_fuentes):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
     acumulado = ""
     pb = st.progress(0)
-
-    for i, f in enumerate(fuentes):
+    for i, f in enumerate(lista_fuentes):
         st.write(f"📡 Escaneando: {f['n']}...")
-        pb.progress((i + 1) / len(fuentes))
+        pb.progress((i + 1) / len(lista_fuentes))
         try:
-            r = requests.get(f['u'], headers=headers, timeout=15)
+            r = requests.get(f['u'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
             for link in soup.find_all('a', href=True):
                 tit = link.get_text().strip()
@@ -56,49 +44,66 @@ def extraer_noticias():
         except: continue
     return acumulado
 
+def generar_con_ia(datos_brutos, contexto_tipo):
+    try:
+        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        modelo_final = next((m for m in modelos if 'flash' in m), modelos[0])
+        model = genai.GenerativeModel(modelo_final)
+        
+        prompt = f"""
+        FECHA: {fecha_hoy}. TIPO DE FUENTES: {contexto_tipo}.
+        PRIORIDAD: 1. IMPUESTOS (unificar término), 2. GOBIERNO, 3. ECONOMÍA.
+        ORGANIZACIÓN: Por ciudad (Cochabamba, Santa Cruz) y tipo de medio (1.1 a 1.4).
+        FORMATO: TITULAR (MAYUS), MEDIO (MAYUS), Resumen 5 líneas, LINK.
+        """
+        res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_brutos)
+        return res.text
+    except Exception as e:
+        return f"Error en IA: {str(e)}"
+
+# --- INTERFAZ ---
+
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button('🚀 EJECUTAR MONITOREO AMPLIADO'):
-        with st.status("Recopilando datos de 24 horas...") as status:
-            raw_data = extraer_noticias()
-            
-            if len(raw_data) > 100:
-                status.update(label="Analizando jerarquía de prioridades...", state="running")
-                try:
-                    # --- SOLUCIÓN AUTOMÁTICA AL ERROR 404 ---
-                    # Listamos los modelos permitidos para tu API Key y tomamos el primero disponible
-                    modelos_permitidos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    modelo_final = next((m for m in modelos_permitidos if 'flash' in m), modelos_permitidos[0])
-                    
-                    model = genai.GenerativeModel(modelo_final)
-                    
-                    prompt = f"""
-                    FECHA: {fecha_hoy}. Eres un experto analista de prensa.
-                    
-                    JERARQUÍA DE CONTENIDO:
-                    1. IMPUESTOS (Prioridad Máxima. Cambia 'Municipales/Nacionales' a 'IMPUESTOS').
-                    2. GOBIERNO (Noticias de gestión, ministros, presidencia).
-                    3. ECONOMÍA (Dólar, bancos, mercados).
-
-                    ESTRUCTURA DEL REPORTE:
-                    Organiza por 1. COCHABAMBA y 2. SANTA CRUZ.
-                    Dentro de cada ciudad, clasifica por: 1.1 Escritos, 1.2 TV, 1.3 Digital, 1.4 Redes Sociales.
-                    
-                    CADA NOTICIA DEBE TENER:
-                    TITULAR (MAYUS), MEDIO (MAYUS), Resumen de 4 a 6 líneas, LINK.
-                    """
-                    
-                    res = model.generate_content(prompt + "\n\nNOTICIAS DETECTADAS:\n" + raw_data)
-                    status.update(label=f"Reporte Finalizado con {modelo_final}", state="complete")
-                    
-                    st.markdown(f'''
-                    <div style="background: white; color: black; padding: 30px; border: 1px solid #ddd; font-family: 'Times New Roman', serif; text-align: justify; line-height: 1.6;">
-                        <h1 style="text-align: center; color: #1a3c5a;">REPORTE ESTRATÉGICO DIARIO</h1>
-                        <hr>
-                        {res.text.replace("\n", "<br>")}
-                    </div>
-                    ''', unsafe_allow_html=True)
-                except Exception as e:
-                    st.error(f"Error de conexión con la IA: {e}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button('🚀 FASE 1: ANALIZAR MEDIOS (Escritos/TV/Digital)'):
+            fuentes_medios = [
+                {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/ultimas-noticias", "r": "Cochabamba", "t": "Escrito"},
+                {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba", "t": "Escrito"},
+                {"n": "EL DEBER", "u": "https://eldeber.com.bo/economia", "r": "Santa Cruz", "t": "Escrito"},
+                {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz", "t": "Escrito"},
+                {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional", "t": "TV"},
+                {"n": "URGENTE.BO", "u": "https://www.urgente.bo/economia", "r": "Nacional", "t": "Digital"}
+            ]
+            datos = scraping_generico(fuentes_medios)
+            if datos:
+                st.session_state.reporte_medios = generar_con_ia(datos, "Medios Tradicionales")
             else:
-                st.warning("No se hallaron suficientes noticias. Intenta ampliar los términos de búsqueda.")
+                st.warning("No se hallaron noticias en medios.")
+
+    with col2:
+        if st.button('📱 FASE 2: AGREGAR REDES SOCIALES (FB/X/IG/TK)'):
+            fuentes_rrss = [
+                {"n": "RRSS CBBA", "u": "https://www.google.com/search?q=impuestos+Cochabamba+site:facebook.com+OR+site:x.com", "r": "Cochabamba", "t": "Redes Sociales"},
+                {"n": "RRSS SCZ", "u": "https://www.google.com/search?q=impuestos+Santa+Cruz+site:instagram.com+OR+site:tiktok.com", "r": "Santa Cruz", "t": "Redes Sociales"}
+            ]
+            datos_rrss = scraping_generico(fuentes_rrss)
+            if datos_rrss:
+                st.session_state.reporte_rrss = generar_con_ia(datos_rrss, "Redes Sociales (Escaneo Directo)")
+            else:
+                st.warning("No se hallaron menciones en redes sociales.")
+
+    # --- MOSTRAR RESULTADOS (Siempre visibles si existen) ---
+    
+    if st.session_state.reporte_medios:
+        st.markdown("### 📰 RESULTADOS: MEDIOS ESCRITOS, TV Y DIGITAL")
+        st.markdown(f'<div style="background: white; color: black; padding: 20px; border-left: 5px solid #1a3c5a; font-family: serif; margin-bottom: 20px;">{st.session_state.reporte_medios.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+
+    if st.session_state.reporte_rrss:
+        st.markdown("### 📱 RESULTADOS: RELEVAMIENTO DE REDES SOCIALES")
+        st.markdown(f'<div style="background: #f0f8ff; color: black; padding: 20px; border-left: 5px solid #00acee; font-family: serif;">{st.session_state.reporte_rrss.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+else:
+    st.info("Por favor, ingresa tu API Key en la barra lateral para comenzar.")
