@@ -16,29 +16,26 @@ fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 # Prioridades: 1. Impuestos, 2. Gobierno, 3. Economía
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "estado", "economia", "dolar", "banco", "crisis"]
 
-# --- ESTADO DE SESIÓN PARA PERSISTENCIA ---
 if 'reporte_medios' not in st.session_state:
     st.session_state.reporte_medios = ""
 if 'reporte_rrss' not in st.session_state:
     st.session_state.reporte_rrss = ""
 
 st.title(f"🔍 MONITOR ESTRATÉGICO BOLIVIA: {fecha_hoy}")
-st.markdown("### Cobertura: Cochabamba, Santa Cruz y Nacional")
 
 api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
-def scraping_avanzado(lista_fuentes):
+def scraping_limpio(fuentes):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-    acumulado = ""
+    datos = ""
     pb = st.progress(0)
-    for i, f in enumerate(lista_fuentes):
+    for i, f in enumerate(fuentes):
         st.write(f"📡 Escaneando: {f['n']}...")
-        pb.progress((i + 1) / len(lista_fuentes))
+        pb.progress((i + 1) / len(fuentes))
         try:
             r = requests.get(f['u'], headers=headers, timeout=12)
             soup = BeautifulSoup(r.text, 'html.parser')
-            links = soup.find_all('a', href=True)
-            for link in links:
+            for link in soup.find_all('a', href=True):
                 tit = link.get_text().strip()
                 url = link['href']
                 if not url.startswith('http'):
@@ -46,50 +43,58 @@ def scraping_avanzado(lista_fuentes):
                     url = base + "/" + url.lstrip('/')
                 
                 if len(tit) > 25 and any(k in (tit + url).lower() for k in KEYWORDS):
-                    acumulado += f"REGION: {f['r']} | MEDIO: {f['n']} | TITULO: {tit} | LINK: {url}\n\n"
+                    datos += f"ORIGEN_FUENTE: {f['n']} | CIUDAD_MEDIO: {f['r']} | INFO: {tit} | LINK: {url}\n\n"
         except: continue
-    return acumulado
+    return datos
 
-def procesar_ia(datos, contexto):
+def procesar_reporte(datos_raw, es_rrss=False):
     try:
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         modelo_final = next((m for m in modelos if 'flash' in m), modelos[0])
         model = genai.GenerativeModel(modelo_final)
         
+        tipo_fuente = "REDES SOCIALES" if es_rrss else "PRENSA Y TV"
+        
         prompt = f"""
-        FECHA: {fecha_hoy}. FUENTES: {contexto}.
-        PRIORIDAD: 1. IMPUESTOS (unificar términos), 2. GOBIERNO, 3. ECONOMÍA.
-        ESTRUCTURA:
-        1. COCHABAMBA (Opinión, Los Tiempos, La Voz de Tarija, Urgente, Innoticias, EnfoqueNews, TV).
-        2. SANTA CRUZ (El Deber, El Mundo, TV).
-        REQUISITO: TITULAR (MAYUS), MEDIO (MAYUS), Resumen 5 líneas, LINK.
+        FECHA: {fecha_hoy}. FUENTES: {tipo_fuente}.
+        PRIORIDAD TEMÁTICA: 1. IMPUESTOS (unificar), 2. GOBIERNO, 3. ECONOMÍA.
+
+        ESTRUCTURA OBLIGATORIA:
+        1. COCHABAMBA (Incluir aquí periódicos de Cbba y noticias de TV que hablen de Cbba).
+        2. SANTA CRUZ (Incluir aquí periódicos de SCZ y noticias de TV que hablen de SCZ).
+
+        FORMATO DE SALIDA (ESTRICTO):
+        **TITULAR EN MAYÚSCULAS** - **NOMBRE DEL MEDIO**
+        Texto del resumen de 5 líneas sin etiquetas previas, analizando el impacto.
+        Enlace directo aquí.
+
+        PROHIBICIONES: No uses palabras como 'Resumen:', 'URL:', 'Título:' o 'Link:'. La información debe ser directa.
         """
-        res = model.generate_content(prompt + "\n\nDATOS:\n" + datos)
+        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
         return res.text
     except Exception as e:
-        return f"Error en IA: {str(e)}"
+        return f"Error en procesamiento: {str(e)}"
 
-# --- LÓGICA DE BOTONES ---
+# --- ACCIONES ---
 
 if api_key:
     genai.configure(api_key=api_key)
+    c1, c2 = st.columns(2)
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button('🚀 FASE 1: MEDIOS ESCRITOS, TV Y DIGITAL'):
-            fuentes_tradicionales = [
-                # COCHABAMBA
+    with c1:
+        if st.button('🚀 FASE 1: PRENSA Y TV'):
+            medios = [
+                # CBBA
                 {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
                 {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
-                {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Cochabamba/Nacional"},
-                {"n": "URGENTE.BO", "u": "https://www.urgente.bo/", "r": "Cochabamba/Nacional"},
+                {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Nacional"},
+                {"n": "URGENTE.BO", "u": "https://www.urgente.bo/", "r": "Nacional"},
                 {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/", "r": "Cochabamba"},
                 {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "r": "Cochabamba"},
-                # SANTA CRUZ
+                # SCZ
                 {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
                 {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz"},
-                # TV (NACIONAL/AMBAS CIUDADES)
+                # TV
                 {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
                 {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"},
                 {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/", "r": "Nacional"},
@@ -98,35 +103,34 @@ if api_key:
                 {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/", "r": "Nacional"},
                 {"n": "ATB", "u": "https://www.atb.com.bo/", "r": "Nacional"}
             ]
-            datos_m = scraping_avanzado(fuentes_tradicionales)
-            if datos_m:
-                st.session_state.reporte_medios = procesar_ia(datos_m, "Medios Tradicionales y TV")
-            else:
-                st.warning("No se hallaron noticias relevantes en esta fase.")
+            datos_brutos = scraping_limpio(medios)
+            if datos_brutos:
+                st.session_state.reporte_medios = procesar_reporte(datos_brutos)
 
-    with col2:
-        if st.button('📱 FASE 2: RELEVAMIENTO REDES SOCIALES'):
-            fuentes_rrss = [
+    with c2:
+        if st.button('📱 FASE 2: REDES SOCIALES'):
+            rrss_queries = [
                 {"n": "FB/X CBBA", "u": "https://www.google.com/search?q=impuestos+Cochabamba+site:facebook.com+OR+site:x.com", "r": "Cochabamba"},
                 {"n": "IG/TK CBBA", "u": "https://www.google.com/search?q=impuestos+Cochabamba+site:instagram.com+OR+site:tiktok.com", "r": "Cochabamba"},
                 {"n": "FB/X SCZ", "u": "https://www.google.com/search?q=impuestos+Santa+Cruz+site:facebook.com+OR+site:x.com", "r": "Santa Cruz"},
                 {"n": "IG/TK SCZ", "u": "https://www.google.com/search?q=impuestos+Santa+Cruz+site:instagram.com+OR+site:tiktok.com", "r": "Santa Cruz"}
             ]
-            datos_r = scraping_avanzado(fuentes_rrss)
-            if datos_r:
-                st.session_state.reporte_rrss = procesar_ia(datos_r, "Redes Sociales (FB, X, IG, TK)")
-            else:
-                st.warning("No se hallaron menciones relevantes en Redes Sociales.")
+            datos_rrss = scraping_limpio(rrss_queries)
+            if datos_rrss:
+                st.session_state.reporte_rrss = procesar_reporte(datos_rrss, es_rrss=True)
 
-    # --- DESPLIEGUE DE RESULTADOS ---
-    
+    # --- SALIDA ---
     if st.session_state.reporte_medios:
-        st.markdown("### 📰 REPORTE: PRENSA ESCRITA Y TELEVISIÓN")
-        st.markdown(f'<div style="background: white; color: black; padding: 25px; border: 1px solid #ccc; font-family: serif;">{st.session_state.reporte_medios.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+        st.subheader("📰 REPORTE DE PRENSA Y TELEVISIÓN")
+        # El reemplazo de asteriscos por <b> ayuda a que Streamlit renderice negritas correctamente
+        res_html = st.session_state.reporte_medios.replace("\n", "<br>")
+        st.markdown(f'<div style="background: white; color: black; padding: 25px; border: 1px solid #ccc; font-family: serif; text-align: justify;">{res_html}</div>', unsafe_allow_html=True)
 
     if st.session_state.reporte_rrss:
         st.markdown("---")
-        st.markdown("### 📱 REPORTE: REDES SOCIALES")
-        st.markdown(f'<div style="background: #f9f9f9; color: black; padding: 25px; border: 1px solid #00acee; font-family: serif;">{st.session_state.reporte_rrss.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+        st.subheader("📱 REPORTE DE REDES SOCIALES")
+        res_rrss_html = st.session_state.reporte_rrss.replace("\n", "<br>")
+        st.markdown(f'<div style="background: #fdfdfd; color: black; padding: 25px; border: 1px solid #00acee; font-family: serif; text-align: justify;">{res_rrss_html}</div>', unsafe_allow_html=True)
+
 else:
-    st.info("Ingresa tu API Key en la barra lateral para activar el monitoreo.")
+    st.warning("Configura tu API Key en el panel lateral.")
