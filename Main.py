@@ -4,12 +4,9 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
-import os
-import time
 from io import BytesIO
-from urllib.parse import urlparse
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt
 from docx.oxml.ns import qn
 import docx.opc.constants
 
@@ -21,27 +18,23 @@ fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
-if 'datos_acumulados' not in st.session_state: st.session_state.datos_acumulados = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Corrección Interlineado y Links) ---
+# --- 2. FUNCIONES DE EXPORTACIÓN (Formato Estricto) ---
 
 def añadir_hipervinculo(paragraph, url):
-    """Crea un enlace azul y subrayado en Word"""
+    """Crea un enlace funcional, azul y subrayado"""
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
     hyperlink.set(qn('r:id'), r_id)
     new_run = docx.oxml.shared.OxmlElement('w:r')
     rPr = docx.oxml.shared.OxmlElement('w:rPr')
-    c = docx.oxml.shared.OxmlElement('w:color')
-    c.set(qn('w:val'), '0000FF')
-    u = docx.oxml.shared.OxmlElement('w:u')
-    u.set(qn('w:val'), 'single')
-    rPr.append(c)
-    rPr.append(u)
+    # Color azul y subrayado
+    c = docx.oxml.shared.OxmlElement('w:color'); c.set(qn('w:val'), '0000FF')
+    u = docx.oxml.shared.OxmlElement('w:u'); u.set(qn('w:val'), 'single')
+    rPr.append(c); rPr.append(u)
     new_run.append(rPr)
-    t = docx.oxml.shared.OxmlElement('w:t')
-    t.text = url
+    t = docx.oxml.shared.OxmlElement('w:t'); t.text = url
     new_run.append(t)
     hyperlink.append(new_run)
     paragraph._p.append(hyperlink)
@@ -61,7 +54,7 @@ def generar_word_oficial(texto, ciudad_tag):
     font.name = 'Times New Roman'
     font.size = Pt(10)
     
-    # INTERLINEADO CERO
+    # INTERLINEADO Y ESPACIADO CERO
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
 
@@ -78,26 +71,24 @@ def generar_word_oficial(texto, ciudad_tag):
     capturando = False
     
     for linea in lineas:
-        l_upper = linea.upper()
-        if target in l_upper and any(prefix in l_upper for prefix in ["1.", "2.", "COCHABAMBA", "SANTA CRUZ"]):
+        l_upper = linea.upper().strip()
+        if target in l_upper and any(p in l_upper for p in ["1.", "2."]):
             capturando = True
             continue
-        other_target = "SANTA CRUZ" if target == "COCHABAMBA" else "COCHABAMBA"
-        if capturando and other_target in l_upper and any(prefix in l_upper for prefix in ["1.", "2."]):
+        if capturando and any(p in l_upper for p in ["1.", "2."]) and target not in l_upper:
             capturando = False
 
         if capturando and linea.strip():
             if "HTTP" in linea.upper():
                 p = doc.add_paragraph()
                 añadir_hipervinculo(p, linea.strip())
-                doc.add_paragraph("") # SALTO DE LÍNEA SIMPLE ENTRE NOTICIAS
+                doc.add_paragraph("") # Salto simple entre noticias
             else:
                 p = doc.add_paragraph()
                 if "*" in linea:
-                    limpia = linea.replace('*', '').strip().upper()
-                    run = p.add_run(limpia)
+                    run = p.add_run(linea.replace('*', '').strip().upper())
                     run.bold = True
-                elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT", "INNOTICIAS", "ENFOQUE NEWS"]):
+                elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS"]):
                     run = p.add_run(l_upper)
                     run.bold = True
                 else:
@@ -111,7 +102,9 @@ def generar_word_oficial(texto, ciudad_tag):
 
 def procesar_ia_robusta(datos_raw):
     try:
+        # CORRECCIÓN: Se usa el nombre del modelo sin prefijos conflictivos
         model = genai.GenerativeModel('gemini-1.5-flash')
+        
         prompt = f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
@@ -139,26 +132,24 @@ def procesar_ia_robusta(datos_raw):
 
 # --- 4. INTERFAZ ---
 
-st.title(f"🔍 MONITOR ESTRATÉGICO TOTAL: {fecha_hoy}")
+st.title(f"🔍 MONITOR ESTRATÉGICO: {fecha_hoy}")
 api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
     
-    if st.button("🚀 INICIAR MONITOREO DE NOTICIAS (PASO 1 Y 2)"):
+    if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
             {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
             {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
             {"n": "LA VOZ DIGITAL", "u": "https://lavoz.digital/", "r": "Santa Cruz"},
             {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"},
-            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
-            {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"}
+            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"}
         ]
         
         datos_crudos = ""
-        pb = st.progress(0)
-        for i, f in enumerate(fuentes):
+        for f in fuentes:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
@@ -167,20 +158,16 @@ if api_key:
                     if len(tit) > 30 and any(k in tit.lower() for k in KEYWORDS_STRICT):
                         datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
             except: continue
-            pb.progress((i + 1) / len(fuentes))
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
-            st.success("Monitoreo completado.")
+            st.success("Monitoreo finalizado.")
         else:
-            st.warning("No se encontraron noticias relevantes.")
+            st.warning("No se hallaron noticias con los filtros actuales.")
 
     if st.session_state.reporte_final:
-        st.markdown("### VISTA PREVIA")
-        st.markdown(f'<div style="background:white;color:black;padding:20px;border:1px solid #ccc;font-family:serif;">{st.session_state.reporte_final.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
-        
         c1, c2 = st.columns(2)
         with c1:
-            st.download_button("Descargar Word COCHABAMBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
         with c2:
-            st.download_button("Descargar Word SANTA CRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_STACRUZ_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
