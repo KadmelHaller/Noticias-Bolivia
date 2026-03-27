@@ -16,11 +16,12 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia"]
+# Keywords optimizadas para reducir el volumen de datos enviados
+KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "bolivia", "presupuesto", "hacienda"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Word con Interlineado 0 y Links Azules) ---
+# --- 2. FUNCIONES DE EXPORTACIÓN (Interlineado 0 y Links Azules) ---
 
 def añadir_hipervinculo(paragraph, url):
     part = paragraph.part
@@ -38,14 +39,6 @@ def añadir_hipervinculo(paragraph, url):
     hyperlink.append(new_run)
     paragraph._p.append(hyperlink)
 
-def obtener_info_envio():
-    ahora = datetime.now(zona_horaria)
-    hm = ahora.hour * 100 + ahora.minute
-    if 830 <= hm <= 930: return "1er Envío"
-    elif 1330 <= hm <= 1430: return "2do Envío"
-    elif 1530 <= hm <= 1630: return "3er Envío"
-    return "Envío Extraordinario"
-
 def generar_word_oficial(texto, ciudad_tag):
     doc = Document()
     style = doc.styles['Normal']
@@ -59,7 +52,11 @@ def generar_word_oficial(texto, ciudad_tag):
     section.header.paragraphs[0].add_run("\n\n")
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
-    doc.add_paragraph(obtener_info_envio())
+    
+    ahora = datetime.now(zona_horaria)
+    hm = ahora.hour * 100 + ahora.minute
+    envio = "1er Envío" if 830 <= hm <= 930 else "2do Envío" if 1330 <= hm <= 1430 else "3er Envío" if 1530 <= hm <= 1630 else "Envío Extraordinario"
+    doc.add_paragraph(envio)
     doc.add_paragraph("")
 
     target = "COCHABAMBA" if ciudad_tag == "CBBA" else "SANTA CRUZ"
@@ -89,28 +86,29 @@ def generar_word_oficial(texto, ciudad_tag):
                     p.add_run(linea)
     bio = BytesIO(); doc.save(bio); return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA (Con Manejo de Cuota 429) ---
+# --- 3. PROCESAMIENTO E IA (Filtrado previo para evitar 429) ---
 
-def procesar_ia_robusta(datos_raw):
-    # Detección automática de modelo para evitar el error 404
+def procesar_ia_robusta(datos_filtrados):
     try:
+        # Buscamos el modelo disponible
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         target_model = next((m for m in modelos if "flash" in m), modelos[0])
         model = genai.GenerativeModel(target_model)
         
-        prompt = f"FECHA: {fecha_hoy}. Solo noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO. ESTRUCTURA: 1. COCHABAMBA, 2. SANTA CRUZ. FORMATO: *TITULAR*, MEDIO, Resumen 5 líneas, Enlace directo."
+        prompt = f"""
+        FECHA: {fecha_hoy}. 
+        IMPORTANTE: Solo incluye noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO.
+        ESTRUCTURA: 1. COCHABAMBA, 2. SANTA CRUZ. 
+        FORMATO: *TITULAR EN MAYÚSCULAS*, MEDIO, Resumen 5 líneas, Enlace directo.
+        No incluyas noticias irrelevantes.
+        """
         
-        # Intento con manejo de cuota (Retry)
-        for intento in range(2):
-            try:
-                res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_raw)
-                return res.text
-            except Exception as e:
-                if "429" in str(e) and intento == 0:
-                    time.sleep(15) # Espera 15 segundos si hay error de cuota
-                    continue
-                raise e
+        # Enviamos solo los datos que pasaron el filtro previo
+        res = model.generate_content(prompt + "\n\nDATOS FILTRADOS:\n" + datos_filtrados)
+        return res.text
     except Exception as e:
+        if "429" in str(e):
+            return "Error: Exceso de cuota. Espera 1 minuto y reintenta."
         return f"Error en la IA: {str(e)}"
 
 # --- 4. INTERFAZ ---
@@ -130,25 +128,26 @@ if api_key:
             {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"}
         ]
         
-        datos_crudos = ""
+        datos_limpios = ""
         for f in fuentes:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
+                # Filtro agresivo antes de mandar a la IA
                 for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
                     tit = el.get_text().strip()
                     if len(tit) > 35 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
+                        datos_limpios += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {tit}\n"
             except: continue
         
-        if datos_crudos:
-            st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
-            st.success("Monitoreo finalizado.")
-            st.text_area("Resultado:", st.session_state.reporte_final, height=300)
+        if datos_limpios:
+            st.session_state.reporte_final = procesar_ia_robusta(datos_limpios)
+            st.success("Completado.")
+            st.text_area("Reporte:", st.session_state.reporte_final, height=300)
         else:
-            st.warning("No se hallaron noticias relevantes.")
+            st.warning("No se hallaron noticias que coincidan con los filtros.")
 
     if st.session_state.reporte_final:
         c1, c2 = st.columns(2)
-        with c1: st.download_button("Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
-        with c2: st.download_button("Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
+        with c1: st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+        with c2: st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
