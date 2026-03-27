@@ -4,16 +4,13 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
-import os
-import time
 from io import BytesIO
-from urllib.parse import urlparse
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+import docx.opc.constants
 
-# --- 1. CONFIGURACIÓN ---
+# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
@@ -21,17 +18,31 @@ fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
-if 'datos_acumulados' not in st.session_state: st.session_state.datos_acumulados = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Times New Roman 10pt) ---
+# --- FUNCIONES TÉCNICAS DE WORD ---
 
-def obtener_info_envio():
-    ahora = datetime.now(zona_horaria)
-    hm = ahora.hour * 100 + ahora.minute
-    if 830 <= hm <= 930: return "1er Envío"
-    elif 1330 <= hm <= 1430: return "2do Envío"
-    elif 1530 <= hm <= 1630: return "3er Envío"
-    return "Envío Extraordinario"
+def añadir_hipervinculo(paragraph, url):
+    """Crea un enlace real en Word (Azul + Subrayado)"""
+    part = paragraph.part
+    r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+    hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+    new_run = docx.oxml.shared.OxmlElement('w:r')
+    rPr = docx.oxml.shared.OxmlElement('w:rPr')
+    # Formato visual del link
+    c = docx.oxml.shared.OxmlElement('w:color')
+    c.set(qn('w:val'), '0000FF')
+    u = docx.oxml.shared.OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')
+    rPr.append(c)
+    rPr.append(u)
+    new_run.append(rPr)
+    t = docx.oxml.shared.OxmlElement('w:t')
+    t.text = url
+    new_run.append(t)
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+    return hyperlink
 
 def generar_word_oficial(texto, ciudad_tag):
     doc = Document()
@@ -40,142 +51,114 @@ def generar_word_oficial(texto, ciudad_tag):
     font.name = 'Times New Roman'
     font.size = Pt(10)
     
-    rFonts = style.element.rPr.rFonts
-    rFonts.set(qn('w:ascii'), 'Times New Roman')
-    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
+    # Interlineado y espaciado CERO absoluto
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.line_spacing = 1.0
 
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
 
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
-    doc.add_paragraph(obtener_info_envio())
-    doc.add_paragraph("")
+    from datetime import datetime # Re-asegurar para la lógica de envío
+    ahora = datetime.now(zona_horaria)
+    hm = ahora.hour * 100 + ahora.minute
+    envio = "1er Envío" if 830 <= hm <= 930 else "2do Envío" if 1330 <= hm <= 1430 else "3er Envío" if 1530 <= hm <= 1630 else "Envío Extraordinario"
+    doc.add_paragraph(envio)
+    doc.add_paragraph("") # Espacio tras encabezado
 
     target = "COCHABAMBA" if ciudad_tag == "CBBA" else "SANTA CRUZ"
     lineas = texto.split('\n')
     capturando = False
     
     for linea in lineas:
-        l_upper = linea.upper()
-        if target in l_upper and any(prefix in l_upper for prefix in ["1.", "2.", "COCHABAMBA", "SANTA CRUZ"]):
+        l_upper = linea.upper().strip()
+        if target in l_upper and any(p in l_upper for p in ["1.", "2."]):
             capturando = True
             continue
-        other_target = "SANTA CRUZ" if target == "COCHABAMBA" else "COCHABAMBA"
-        if capturando and other_target in l_upper and any(prefix in l_upper for prefix in ["1.", "2."]):
+        if capturando and any(p in l_upper for p in ["1.", "2."]) and target not in l_upper:
             capturando = False
 
         if capturando and linea.strip():
-            p = doc.add_paragraph()
-            if "*" in linea:
-                limpia = linea.replace('*', '').strip().upper()
-                run = p.add_run(limpia)
-                run.bold = True
-            elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT", "INNOTICIAS", "ENFOQUE NEWS"]):
-                run = p.add_run(l_upper)
-                run.bold = True
+            # Si es un link, crear hipervínculo real
+            if "http" in linea.lower():
+                p = doc.add_paragraph()
+                añadir_hipervinculo(p, linea.strip())
+                doc.add_paragraph("") # SALTO DE LÍNEA SIMPLE ENTRE NOTICIAS
             else:
-                p.add_run(linea)
-            p.paragraph_format.space_after = Pt(4)
+                p = doc.add_paragraph()
+                if "*" in linea: # Titular
+                    run = p.add_run(linea.replace('*', '').strip().upper())
+                    run.bold = True
+                elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT"]):
+                    run = p.add_run(l_upper)
+                    run.bold = True
+                else:
+                    p.add_run(linea)
 
     bio = BytesIO()
     doc.save(bio)
     return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA (OPTIMIZADO PARA EVITAR CUOTAS AGOTADAS) ---
+# --- PROCESAMIENTO E IA ---
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # 1. Obtener todos los modelos disponibles
         modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # 2. Priorizar 'gemini-1.5-flash' porque tiene la cuota gratuita más generosa
-        # (15 peticiones por minuto vs las 2 o 3 de los modelos Pro)
-        nombre_modelo = ""
-        for m in modelos_disponibles:
-            if "1.5-flash" in m:
-                nombre_modelo = m
-                break
-        
-        if not nombre_modelo:
-            nombre_modelo = modelos_disponibles[0]
-
+        nombre_modelo = next((m for m in modelos_disponibles if "1.5-flash" in m), modelos_disponibles[0])
         model = genai.GenerativeModel(nombre_modelo)
         
         prompt = f"""
         FECHA: {fecha_hoy}. 
-        IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
-        Ignora cultura, tecnología, internacionales o deportes.
-
+        SOLO noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO. 
         ESTRUCTURA OBLIGATORIA:
         1. COCHABAMBA
-        (Noticias de medios de Cbba como Opinión, Los Tiempos, Innoticias, Urgente.bo, Enfoque News y nacionales que afecten a Cochabamba)
-
         2. SANTA CRUZ
-        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a Santa Cruz)
-
-        FORMATO POR NOTICIA:
-        *TITULAR EXACTO EN MAYÚSCULAS*
-        NOMBRE DEL MEDIO EN MAYÚSCULAS
+        FORMATO:
+        *TITULAR EN MAYÚSCULAS*
+        MEDIO EN MAYÚSCULAS
         Resumen de 5 líneas con nombres y cargos exactos. Sin etiquetas.
-        Enlace sin etiqueta, directo, en minúsculas.
-
-        Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. 
+        Enlace directo en la última línea.
         """
-        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
+        res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_raw)
         return res.text
     except Exception as e:
-        if "429" in str(e):
-            return "Error: Has agotado el límite de mensajes gratuitos de Google por hoy. Espera unos minutos o usa otra API Key."
-        return f"Error técnico en la IA: {str(e)}"
+        return f"Error: {str(e)}"
 
-# --- 4. INTERFAZ ---
+# --- INTERFAZ ---
 
-st.title(f"🔍 MONITOR ESTRATÉGICO TOTAL: {fecha_hoy}")
-api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
+st.title(f"🔍 MONITOR ESTRATÉGICO: {fecha_hoy}")
+api_key = st.sidebar.text_input("Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
-    
-    if st.button("🚀 INICIAR MONITOREO DE NOTICIAS"):
+    if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
             {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
             {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
             {"n": "LA VOZ DIGITAL", "u": "https://lavoz.digital/", "r": "Santa Cruz"},
-            {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"},
-            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
-            {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"}
+            {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
         ]
-        
         datos_crudos = ""
-        pb = st.progress(0)
-        for i, f in enumerate(fuentes):
+        for f in fuentes:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
                 for el in soup.find_all(['h1', 'h2', 'h3']):
                     tit = el.get_text().strip()
                     if len(tit) > 30 and any(k in tit.lower() for k in KEYWORDS_STRICT):
-                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
+                        datos_crudos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {tit}\n"
             except: continue
-            pb.progress((i + 1) / len(fuentes))
         
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
-            if "Error" not in st.session_state.reporte_final:
-                st.success("Monitoreo completado.")
-            else:
-                st.error(st.session_state.reporte_final)
-        else:
-            st.warning("No se encontraron noticias relevantes.")
+            st.success("Listo.")
 
-    if st.session_state.reporte_final and "Error" not in st.session_state.reporte_final:
-        st.markdown("### VISTA PREVIA DEL REPORTE")
-        st.markdown(f'<div style="background:white;color:black;padding:20px;border:1px solid #ccc;font-family:serif;">{st.session_state.reporte_final.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
-        
+    if st.session_state.reporte_final:
+        st.subheader("💾 EXPORTAR")
         c1, c2 = st.columns(2)
         with c1:
-            st.download_button("Descargar Word COCHABAMBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
         with c2:
-            st.download_button("Descargar Word SANTA CRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_STACRUZ_{fecha_hoy.replace('/','-')}.docx")
+            st.download_button("Descargar Word STACRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_STACRUZ_{fecha_hoy.replace('/','-')}.docx")
