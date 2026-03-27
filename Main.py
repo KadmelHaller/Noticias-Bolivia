@@ -100,4 +100,82 @@ def procesar_ia_robusta(datos_raw):
         if not nombre_modelo:
             nombre_modelo = modelos_disponibles[0]
 
-        model = genai.GenerativeModel(
+        model = genai.GenerativeModel(nombre_modelo)
+        
+        prompt = f"""
+        FECHA: {fecha_hoy}. 
+        IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
+        Ignora cultura, tecnología, internacionales o deportes.
+
+        ESTRUCTURA OBLIGATORIA:
+        1. COCHABAMBA
+        (Noticias de medios de Cbba como Opinión, Los Tiempos, Innoticias, Urgente.bo, Enfoque News y nacionales que afecten a Cochabamba)
+
+        2. SANTA CRUZ
+        (Noticias de El Deber, El Mundo, La Voz Digital, Visión 360 y nacionales que afecten a Santa Cruz)
+
+        FORMATO POR NOTICIA:
+        *TITULAR EXACTO EN MAYÚSCULAS*
+        NOMBRE DEL MEDIO EN MAYÚSCULAS
+        Resumen de 5 líneas con nombres y cargos exactos. Sin etiquetas.
+        Enlace sin etiqueta, directo, en minúsculas.
+
+        Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. 
+        """
+        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
+        return res.text
+    except Exception as e:
+        if "429" in str(e):
+            return "Error: Has agotado el límite de mensajes gratuitos de Google por hoy. Espera unos minutos o usa otra API Key."
+        return f"Error técnico en la IA: {str(e)}"
+
+# --- 4. INTERFAZ ---
+
+st.title(f"🔍 MONITOR ESTRATÉGICO TOTAL: {fecha_hoy}")
+api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
+
+if api_key:
+    genai.configure(api_key=api_key)
+    
+    if st.button("🚀 INICIAR MONITOREO DE NOTICIAS"):
+        fuentes = [
+            {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
+            {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
+            {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
+            {"n": "LA VOZ DIGITAL", "u": "https://lavoz.digital/", "r": "Santa Cruz"},
+            {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"},
+            {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
+            {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"}
+        ]
+        
+        datos_crudos = ""
+        pb = st.progress(0)
+        for i, f in enumerate(fuentes):
+            try:
+                r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for el in soup.find_all(['h1', 'h2', 'h3']):
+                    tit = el.get_text().strip()
+                    if len(tit) > 30 and any(k in tit.lower() for k in KEYWORDS_STRICT):
+                        datos_crudos += f"MEDIO: {f['n']} | CIUDAD: {f['r']} | NOTICIA: {tit}\n"
+            except: continue
+            pb.progress((i + 1) / len(fuentes))
+        
+        if datos_crudos:
+            st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
+            if "Error" not in st.session_state.reporte_final:
+                st.success("Monitoreo completado.")
+            else:
+                st.error(st.session_state.reporte_final)
+        else:
+            st.warning("No se encontraron noticias relevantes.")
+
+    if st.session_state.reporte_final and "Error" not in st.session_state.reporte_final:
+        st.markdown("### VISTA PREVIA DEL REPORTE")
+        st.markdown(f'<div style="background:white;color:black;padding:20px;border:1px solid #ccc;font-family:serif;">{st.session_state.reporte_final.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button("Descargar Word COCHABAMBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+        with c2:
+            st.download_button("Descargar Word SANTA CRUZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_STACRUZ_{fecha_hoy.replace('/','-')}.docx")
