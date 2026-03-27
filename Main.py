@@ -18,7 +18,6 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Keywords ultra-específicas para evitar noticias de cultura/tecnología exterior
 KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible"]
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
@@ -41,12 +40,10 @@ def generar_word_oficial(texto, ciudad_tag):
     font.name = 'Times New Roman'
     font.size = Pt(10)
     
-    # Forzar Times New Roman
     rFonts = style.element.rPr.rFonts
     rFonts.set(qn('w:ascii'), 'Times New Roman')
     rFonts.set(qn('w:hAnsi'), 'Times New Roman')
 
-    # Encabezado: Espacio para el logo (Mismo formato que el archivo enviado)
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
 
@@ -61,23 +58,19 @@ def generar_word_oficial(texto, ciudad_tag):
     
     for linea in lineas:
         l_upper = linea.upper()
-        # Detección de inicio de sección
         if target in l_upper and any(prefix in l_upper for prefix in ["1.", "2.", "COCHABAMBA", "SANTA CRUZ"]):
             capturando = True
             continue
-        # Detección de fin de sección (cuando empieza la otra ciudad)
         other_target = "SANTA CRUZ" if target == "COCHABAMBA" else "COCHABAMBA"
         if capturando and other_target in l_upper and any(prefix in l_upper for prefix in ["1.", "2."]):
             capturando = False
 
         if capturando and linea.strip():
             p = doc.add_paragraph()
-            # TITULARES: Negrita y Mayúsculas (detecta asteriscos de la IA)
             if "*" in linea:
                 limpia = linea.replace('*', '').strip().upper()
                 run = p.add_run(limpia)
                 run.bold = True
-            # MEDIOS: Negrita (detecta nombres de medios conocidos)
             elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS", "ATB", "PAT", "INNOTICIAS", "ENFOQUE NEWS"]):
                 run = p.add_run(l_upper)
                 run.bold = True
@@ -89,25 +82,26 @@ def generar_word_oficial(texto, ciudad_tag):
     doc.save(bio)
     return bio.getvalue()
 
-# --- 3. PROCESAMIENTO E IA ---
+# --- 3. PROCESAMIENTO E IA (REPARADO DEFINITIVAMENTE) ---
 
 def procesar_ia_robusta(datos_raw):
     try:
-        # CAMBIO CLAVE: Se usa el nombre del modelo sin prefijos y se maneja la excepción
-        # Si falla el 1.5-flash, intentará con gemini-pro que es más estable en v1beta
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            res = model.generate_content(tu_prompt_logic(datos_raw))
-        except:
-            model = genai.GenerativeModel('gemini-pro')
-            res = model.generate_content(tu_prompt_logic(datos_raw))
-            
-        return res.text
-    except Exception as e:
-        return f"Error en la IA: {str(e)}"
+        # Buscamos qué modelos tiene permitidos tu API Key para evitar el 404
+        modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Prioridad: 1.5-flash -> gemini-pro -> el primero que aparezca
+        nombre_modelo = modelos_disponibles[0]
+        for m in modelos_disponibles:
+            if "1.5-flash" in m:
+                nombre_modelo = m
+                break
+            elif "gemini-pro" in m:
+                nombre_modelo = m
 
-def tu_prompt_logic(datos_raw):
-    return f"""
+        model = genai.GenerativeModel(nombre_modelo)
+        
+        # Mantenemos TU prompt exacto
+        prompt = f"""
         FECHA: {fecha_hoy}. 
         IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
         Ignora cultura, tecnología, internacionales o deportes.
@@ -126,7 +120,11 @@ def tu_prompt_logic(datos_raw):
         Enlace sin etiqueta, directo, en minúsculas.
 
         Regla: Usa UN asterisco (*) para el titular. El medio en la línea de abajo. 
-        \n\nDATOS RECOPILADOS:\n{datos_raw}"""
+        """
+        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
+        return res.text
+    except Exception as e:
+        return f"Error técnico en la IA: {str(e)}"
 
 # --- 4. INTERFAZ ---
 
