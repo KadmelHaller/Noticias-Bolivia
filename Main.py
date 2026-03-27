@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 from io import BytesIO
+import time
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
@@ -19,10 +20,9 @@ KEYWORDS_STRICT = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "
 
 if 'reporte_final' not in st.session_state: st.session_state.reporte_final = ""
 
-# --- 2. FUNCIONES DE EXPORTACIÓN (Word Exacto) ---
+# --- 2. FUNCIONES DE EXPORTACIÓN (Word con Interlineado 0 y Links Azules) ---
 
 def añadir_hipervinculo(paragraph, url):
-    """Crea un enlace funcional, azul y subrayado"""
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
@@ -52,14 +52,11 @@ def generar_word_oficial(texto, ciudad_tag):
     font = style.font
     font.name = 'Times New Roman'
     font.size = Pt(10)
-    
-    # INTERLINEADO Y ESPACIADO CERO ABSOLUTO
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
 
     section = doc.sections[0]
     section.header.paragraphs[0].add_run("\n\n")
-
     doc.add_paragraph("N°")
     doc.add_paragraph(fecha_hoy)
     doc.add_paragraph(obtener_info_envio())
@@ -81,53 +78,38 @@ def generar_word_oficial(texto, ciudad_tag):
             if "HTTP" in linea.upper():
                 p = doc.add_paragraph()
                 añadir_hipervinculo(p, linea.strip())
-                doc.add_paragraph("") # Salto de línea simple entre noticias
+                doc.add_paragraph("") 
             else:
                 p = doc.add_paragraph()
                 if "*" in linea:
-                    run = p.add_run(linea.replace('*', '').strip().upper())
-                    run.bold = True
+                    run = p.add_run(linea.replace('*', '').strip().upper()); run.bold = True
                 elif any(m in l_upper for m in ["OPINIÓN", "EL DEBER", "UNITEL", "RED UNO", "LA VOZ", "VISIÓN 360", "LOS TIEMPOS"]):
-                    run = p.add_run(l_upper)
-                    run.bold = True
+                    run = p.add_run(l_upper); run.bold = True
                 else:
                     p.add_run(linea)
+    bio = BytesIO(); doc.save(bio); return bio.getvalue()
 
-    bio = BytesIO()
-    doc.save(bio)
-    return bio.getvalue()
-
-# --- 3. PROCESAMIENTO E IA (Solución 404 Definitiva) ---
+# --- 3. PROCESAMIENTO E IA (Con Manejo de Cuota 429) ---
 
 def procesar_ia_robusta(datos_raw):
+    # Detección automática de modelo para evitar el error 404
     try:
-        # DETECCIÓN AUTOMÁTICA DE MODELO DISPONIBLE
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # Priorizar flash para evitar cuotas, sino el primero que haya
         target_model = next((m for m in modelos if "flash" in m), modelos[0])
-        
         model = genai.GenerativeModel(target_model)
         
-        prompt = f"""
-        FECHA: {fecha_hoy}. 
-        IMPORTANTE: Solo incluye noticias de BOLIVIA relacionadas con IMPUESTOS principalmente, luego ECONOMÍA y GOBIERNO. 
-        Ignora cultura, tecnología, internacionales o deportes.
-
-        ESTRUCTURA OBLIGATORIA:
-        1. COCHABAMBA
-        (Noticias de medios de Cbba como Opinión, Los Tiempos e Innoticias)
-
-        2. SANTA CRUZ
-        (Noticias de El Deber, El Mundo, La Voz Digital y Visión 360)
-
-        FORMATO POR NOTICIA:
-        *TITULAR EXACTO EN MAYÚSCULAS*
-        NOMBRE DEL MEDIO EN MAYÚSCULAS
-        Resumen de 5 líneas con nombres y cargos exactos.
-        Enlace directo en la última línea.
-        """
-        res = model.generate_content(prompt + "\n\nDATOS RECOPILADOS:\n" + datos_raw)
-        return res.text
+        prompt = f"FECHA: {fecha_hoy}. Solo noticias de BOLIVIA sobre IMPUESTOS, ECONOMÍA y GOBIERNO. ESTRUCTURA: 1. COCHABAMBA, 2. SANTA CRUZ. FORMATO: *TITULAR*, MEDIO, Resumen 5 líneas, Enlace directo."
+        
+        # Intento con manejo de cuota (Retry)
+        for intento in range(2):
+            try:
+                res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_raw)
+                return res.text
+            except Exception as e:
+                if "429" in str(e) and intento == 0:
+                    time.sleep(15) # Espera 15 segundos si hay error de cuota
+                    continue
+                raise e
     except Exception as e:
         return f"Error en la IA: {str(e)}"
 
@@ -138,7 +120,6 @@ api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
-    
     if st.button("🚀 INICIAR MONITOREO"):
         fuentes = [
             {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
@@ -154,7 +135,6 @@ if api_key:
             try:
                 r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
                 soup = BeautifulSoup(r.text, 'html.parser')
-                # Buscamos en títulos y enlaces
                 for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
                     tit = el.get_text().strip()
                     if len(tit) > 35 and any(k in tit.lower() for k in KEYWORDS_STRICT):
@@ -164,13 +144,11 @@ if api_key:
         if datos_crudos:
             st.session_state.reporte_final = procesar_ia_robusta(datos_crudos)
             st.success("Monitoreo finalizado.")
-            st.text_area("Vista previa:", st.session_state.reporte_final, height=200)
+            st.text_area("Resultado:", st.session_state.reporte_final, height=300)
         else:
-            st.warning("No se hallaron noticias. Verifica la conexión.")
+            st.warning("No se hallaron noticias relevantes.")
 
     if st.session_state.reporte_final:
         c1, c2 = st.columns(2)
-        with c1:
-            st.download_button("Descargar Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
-        with c2:
-            st.download_button("Descargar Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
+        with c1: st.download_button("Word CBBA", generar_word_oficial(st.session_state.reporte_final, "CBBA"), f"Reporte_CBBA_{fecha_hoy.replace('/','-')}.docx")
+        with c2: st.download_button("Word SCZ", generar_word_oficial(st.session_state.reporte_final, "STACRUZ"), f"Reporte_SCZ_{fecha_hoy.replace('/','-')}.docx")
