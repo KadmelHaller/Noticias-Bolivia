@@ -59,7 +59,7 @@ def procesar_ia(datos_crudos):
         prompt = f"""
         FECHA: {fecha_hoy}. Reporte técnico. 
         Divide en: 1. COCHABAMBA/TARIJA | 2. SANTA CRUZ. 
-        Formato: **TITULAR**, **MEDIO**, Resumen 5 líneas, Link.
+        Formato: **TITULAR**, **MEDIO**, Resumen 5 líneas, Link sin etiqueta.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
