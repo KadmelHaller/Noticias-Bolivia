@@ -66,9 +66,9 @@ def procesar_ia(datos_crudos):
         1. COCHABAMBA (Incluye Tarija y nacionales que afecten estas zonas)
         2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
         
-        FORMATO:
-        *TITULAR EN MAYÚSCULAS Y NEGRITAS*
-        *MEDIO EN MAYÚSCULAS Y NEGRITAS*
+        FORMATO ESPECÍFICO:
+        TITULAR EN MAYÚSCULAS Y NEGRITAS
+        MEDIO EN MAYÚSCULAS Y NEGRITAS
         Resumen técnico de 5 líneas sin cambios, revisando profundamente nombres y cargos de personas mencionadas.
         Link directo.
         """
