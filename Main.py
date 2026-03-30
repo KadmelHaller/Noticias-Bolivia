@@ -4,16 +4,17 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
-from googlesearch import search
+import urllib.parse
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Monitor Estratégico Total", layout="wide")
+# --- 1. CONFIGURACIÓN ---
+st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
+# Filtro de palabras clave
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "tarija"]
 
-# --- FUNCIÓN SCRAPING MEDIOS ---
+# --- 2. RASTREADOR DE PRENSA Y TV (SCRAPING) ---
 def buscar_noticias():
     fuentes = [
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
@@ -43,82 +44,63 @@ def buscar_noticias():
                 texto = el.get_text().strip()
                 link = el.get('href', '')
                 if len(texto) > 30 and any(k in texto.lower() for k in KEYWORDS):
-                    full_link = link if link.startswith('http') else f['u'].rstrip('/') + link
+                    full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
                     hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
         except: continue
     return hallazgos
 
-# --- FUNCIÓN IA (SOLUCIÓN 404) ---
+# --- 3. ANALISTA IA (CON SOLUCIÓN 404) ---
 def procesar_ia(datos_crudos):
     try:
-        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        modelo_id = next((m for m in modelos if "1.5-flash" in m), modelos[0])
+        modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        modelo_id = next((m for m in modelos_visibles if "1.5-flash" in m), modelos_visibles[0])
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
-        FECHA: {fecha_hoy}
-        1. COCHABAMBA (Incluye Tarija y nacionales para esta zona)
-        2. SANTA CRUZ (Incluye nacionales para esta zona)
-        
-        FORMATO:
-        **TITULAR EN MAYÚSCULAS**
-        **MEDIO EN MAYÚSCULAS**
-        Resumen técnico de 5 líneas sin cambios.
-        Link directo.
+        FECHA: {fecha_hoy}. Reporte técnico. 
+        Divide en: 1. COCHABAMBA/TARIJA | 2. SANTA CRUZ. 
+        Formato: **TITULAR**, **MEDIO**, Resumen 5 líneas, Link.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error en IA: {str(e)}"
 
-# --- INTERFAZ STREAMLIT ---
-st.title(f"Monitor Estratégico Total: {fecha_hoy}")
+# --- 4. INTERFAZ ---
+st.title(f"Monitor Estratégico: {fecha_hoy}")
 api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
-# SECCIÓN 1: PRENSA ESCRITA Y TV
-st.header("1. Monitoreo de Prensa y TV")
+# SECCIÓN 1: PRENSA
+st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button("🚀 Iniciar Scraping de Medios"):
-        with st.spinner("Rastreando medios..."):
+    if st.button("🚀 Iniciar Escaneo de Medios"):
+        with st.spinner("Procesando noticias..."):
             datos = buscar_noticias()
             if datos:
-                resultado = procesar_ia(datos)
-                st.text_area("RESULTADOS PRENSA (COPIAR):", value=resultado, height=500)
+                st.text_area("RESULTADOS PARA COPIAR:", value=procesar_ia(datos), height=500)
             else:
-                st.warning("No se hallaron noticias en medios.")
+                st.warning("No se hallaron noticias relevantes hoy.")
+else:
+    st.info("Ingresa tu API Key en la izquierda.")
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES (TU CÓDIGO ANIDADO)
-st.header("2. Monitoreo de Redes e Influencers")
-queries = [
-    '"impuestos" "Cochabamba" site:facebook.com',
-    '"impuestos" "Cochabamba" site:x.com',
-    '"impuestos" "Cochabamba" site:instagram.com',
-    '"impuestos" "Cochabamba" site:tiktok.com',
-    '"impuestos" "Santa Cruz" site:facebook.com',
-    '"impuestos" "Santa Cruz" site:x.com',
-    '"impuestos" "Santa Cruz" site:instagram.com',
-    '"impuestos" "Santa Cruz" site:tiktok.com'
-]
+# SECCIÓN 2: REDES (BÚSQUEDA INTELIGENTE SIN ERRORES)
+st.header("2. Redes Sociales (Últimas 24h)")
+st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
 
-if st.button("🔍 Iniciar Rastreo de Redes"):
-    resultados_encontrados = []
-    with st.spinner("Rastreando redes sociales..."):
-        for q in queries:
-            try:
-                for res in search(q, lang="es", num=5, stop=5, pause=2, extra_params={'tbs': 'qdr:d'}):
-                    blacklist = ["oferta", "precio", "vendo", "noticiero", "diario", "curso", "taller", "inscripciones"]
-                    if not any(word in res.lower() for word in blacklist):
-                        resultados_encontrados.append(res)
-            except Exception as e:
-                st.error(f"Error en {q}: {e}")
+redes = ["Facebook", "X", "TikTok", "Instagram"]
+col1, col2 = st.columns(2)
 
-    links = list(set(resultados_encontrados))
-    if not links:
-        st.warning("No se encontraron menciones en redes sociales en las últimas 24h.")
-    else:
-        st.success(f"Se detectaron {len(links)} posibles menciones.")
-        for link in links:
-            st.markdown(f"📌 **Posible Opinión:** [Ver Publicación]({link})")
+with col1:
+    st.subheader("Cochabamba")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Cochabamba"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
+
+with col2:
+    st.subheader("Santa Cruz")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Santa Cruz"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
