@@ -65,12 +65,13 @@ def procesar_ia(datos_crudos):
         FECHA: {fecha_hoy}
         1. COCHABAMBA (Incluye Tarija y nacionales que afecten estas zonas)
         2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
+        Todo en tipo de letras Times New Roman, tamaño 10 puntos.
         
-        FORMATO ESPECÍFICO:
-        <k>TITULAR EN MAYÚSCULAS</k>
-        <k>MEDIO EN MAYÚSCULAS</k>
+        FORMATO ESPECÍFICO, a seguir según formato html:
+        <b>TITULAR EN MAYÚSCULAS</b>
+        <b>MEDIO EN MAYÚSCULAS</b>
         Resumen técnico de 5 líneas sin cambios, revisando profundamente nombres y cargos de personas mencionadas.
-        Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.
+        <u>Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.</u>
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
