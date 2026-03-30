@@ -67,10 +67,10 @@ def procesar_ia(datos_crudos):
         2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
         
         FORMATO ESPECÍFICO:
-        TITULAR EN MAYÚSCULAS Y NEGRITAS
-        MEDIO EN MAYÚSCULAS Y NEGRITAS
+        <k>TITULAR EN MAYÚSCULAS</k>
+        <k>MEDIO EN MAYÚSCULAS</k>
         Resumen técnico de 5 líneas sin cambios, revisando profundamente nombres y cargos de personas mencionadas.
-        Link directo.
+        Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
