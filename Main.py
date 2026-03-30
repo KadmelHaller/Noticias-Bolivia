@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
+from monitor_impuestos import run_impuestos_monitor
 
 st.set_page_config(page_title="Monitor Estratégico", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
@@ -90,3 +91,17 @@ if api_key:
             st.text_area("RESULTADOS (COPIAR ABAJO):", value=resultado, height=700)
         else:
             st.warning("No hay noticias con esas keywords.")
+
+#APLICACIÓN ADICIONAL PARA RRSS DESDE GOOGLE:
+
+st.sidebar.title("Panel de Control")
+opcion = st.sidebar.selectbox("Selecciona el Monitor", ["Mi Monitor Actual", "Influencers Impuestos"])
+
+if opcion == "Mi Monitor Actual":
+    st.title("Tu Monitor Principal")
+    st.write("Aquí va el código que ya tenías funcionando.")
+    # ... tu código antiguo aquí ...
+
+elif opcion == "Influencers Impuestos":
+    # Llamamos a la función anidada
+    run_impuestos_monitor()
