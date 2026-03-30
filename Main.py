@@ -4,16 +4,18 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
+from googlesearch import search
 
-st.set_page_config(page_title="Monitor Estratégico", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Monitor Estratégico Total", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "tarija"]
 
+# --- FUNCIÓN SCRAPING MEDIOS ---
 def buscar_noticias():
     fuentes = [
-        # Cochabamba / Tarija
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
         {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Tarija"},
@@ -27,16 +29,8 @@ def buscar_noticias():
         {"n": "URGENTE.BO", "u": "https://urgente.bo/", "r": "Nacional"},
         {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/", "r": "Cochabamba"},
         {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "r": "Cochabamba"},
-        # Santa Cruz
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz"},
-        {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
-        {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/", "r": "Nacional"},
-        {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/", "r": "Nacional"},
-        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/", "r": "Nacional"},
-        {"n": "ATB", "u": "https://www.atb.com.bo/", "r": "Nacional"},
-        {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"},
-        {"n": "CADENA A", "u": "https://cadenaa.tv/", "r": "Nacional"},
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Santa Cruz"}
     ]
     
@@ -54,39 +48,77 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
+# --- FUNCIÓN IA (SOLUCIÓN 404) ---
 def procesar_ia(datos_crudos):
     try:
-        # Solución Error 404: Usar identificación automática del modelo
         modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         modelo_id = next((m for m in modelos if "1.5-flash" in m), modelos[0])
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
         FECHA: {fecha_hoy}
-        1. COCHABAMBA (Incluye Tarija y nacionales que afecten estas zonas)
-        2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
-        Todo en tipo de letras Times New Roman, tamaño 10 puntos.
+        1. COCHABAMBA (Incluye Tarija y nacionales para esta zona)
+        2. SANTA CRUZ (Incluye nacionales para esta zona)
         
-        FORMATO ESPECÍFICO:
-        TITULAR EN MAYÚSCULAS Y NEGRITA
-        MEDIO EN MAYÚSCULAS
-        Resumen técnico en 5 líneas del artículo, presentado en formato periodístico, revisando profundamente nombres y cargos de personas mencionadas.
-        Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.
+        FORMATO:
+        **TITULAR EN MAYÚSCULAS**
+        **MEDIO EN MAYÚSCULAS**
+        Resumen técnico de 5 líneas sin cambios.
+        Link directo.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
     except Exception as e:
         return f"Error: {str(e)}"
 
-st.title(f"Monitor: {fecha_hoy}")
-api_key = st.sidebar.text_input("API Key:", type="password")
+# --- INTERFAZ STREAMLIT ---
+st.title(f"Monitor Estratégico Total: {fecha_hoy}")
+api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
+# SECCIÓN 1: PRENSA ESCRITA Y TV
+st.header("1. Monitoreo de Prensa y TV")
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button("🚀 INICIAR"):
-        datos = buscar_noticias()
-        if datos:
-            resultado = procesar_ia(datos)
-            st.text_area("RESULTADOS (COPIAR ABAJO):", value=resultado, height=700)
-        else:
-            st.warning("No hay noticias con esas keywords.")
+    if st.button("🚀 Iniciar Scraping de Medios"):
+        with st.spinner("Rastreando medios..."):
+            datos = buscar_noticias()
+            if datos:
+                resultado = procesar_ia(datos)
+                st.text_area("RESULTADOS PRENSA (COPIAR):", value=resultado, height=500)
+            else:
+                st.warning("No se hallaron noticias en medios.")
+
+st.divider()
+
+# SECCIÓN 2: REDES SOCIALES (TU CÓDIGO ANIDADO)
+st.header("2. Monitoreo de Redes e Influencers")
+queries = [
+    '"impuestos" "Cochabamba" site:facebook.com',
+    '"impuestos" "Cochabamba" site:x.com',
+    '"impuestos" "Cochabamba" site:instagram.com',
+    '"impuestos" "Cochabamba" site:tiktok.com',
+    '"impuestos" "Santa Cruz" site:facebook.com',
+    '"impuestos" "Santa Cruz" site:x.com',
+    '"impuestos" "Santa Cruz" site:instagram.com',
+    '"impuestos" "Santa Cruz" site:tiktok.com'
+]
+
+if st.button("🔍 Iniciar Rastreo de Redes"):
+    resultados_encontrados = []
+    with st.spinner("Rastreando redes sociales..."):
+        for q in queries:
+            try:
+                for res in search(q, lang="es", num=5, stop=5, pause=2, extra_params={'tbs': 'qdr:d'}):
+                    blacklist = ["oferta", "precio", "vendo", "noticiero", "diario", "curso", "taller", "inscripciones"]
+                    if not any(word in res.lower() for word in blacklist):
+                        resultados_encontrados.append(res)
+            except Exception as e:
+                st.error(f"Error en {q}: {e}")
+
+    links = list(set(resultados_encontrados))
+    if not links:
+        st.warning("No se encontraron menciones en redes sociales en las últimas 24h.")
+    else:
+        st.success(f"Se detectaron {len(links)} posibles menciones.")
+        for link in links:
+            st.markdown(f"📌 **Posible Opinión:** [Ver Publicación]({link})")
