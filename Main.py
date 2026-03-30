@@ -67,11 +67,11 @@ def procesar_ia(datos_crudos):
         2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
         Todo en tipo de letras Times New Roman, tamaño 10 puntos.
         
-        FORMATO ESPECÍFICO, a seguir según formato html:
-        <b>TITULAR EN MAYÚSCULAS</b>
-        <b>MEDIO EN MAYÚSCULAS</b>
-        Resumen técnico de 5 líneas sin cambios, revisando profundamente nombres y cargos de personas mencionadas.
-        <u>Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.</u>
+        FORMATO ESPECÍFICO:
+        TITULAR EN MAYÚSCULAS Y NEGRITA
+        MEDIO EN MAYÚSCULAS
+        Resumen técnico en 5 líneas del artículo, presentado en formato periodístico, revisando profundamente nombres y cargos de personas mencionadas.
+        Link directo, sin etiquetas, azul subrayado, como formato de enlace de microsoft word.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
