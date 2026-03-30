@@ -13,7 +13,7 @@ KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana"
 
 def buscar_noticias():
     fuentes = [
-        # Cochabamba / Tarija / Nacional
+        # Cochabamba / Tarija
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
         {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Tarija"},
@@ -30,6 +30,13 @@ def buscar_noticias():
         # Santa Cruz
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz"},
+        {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
+        {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/", "r": "Nacional"},
+        {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/", "r": "Nacional"},
+        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/", "r": "Nacional"},
+        {"n": "ATB", "u": "https://www.atb.com.bo/", "r": "Nacional"},
+        {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"},
+        {"n": "CADENA A", "u": "https://cadenaa.tv/", "r": "Nacional"},
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Santa Cruz"}
     ]
     
@@ -60,9 +67,9 @@ def procesar_ia(datos_crudos):
         2. SANTA CRUZ (Incluye nacionales que afecten esta zona)
         
         FORMATO:
-        **TITULAR EN MAYÚSCULAS**
-        **MEDIO EN MAYÚSCULAS**
-        Resumen técnico de 5 líneas sin cambios.
+        *TITULAR EN MAYÚSCULAS Y NEGRITAS*
+        *MEDIO EN MAYÚSCULAS Y NEGRITAS*
+        Resumen técnico de 5 líneas sin cambios, revisando profundamente nombres y cargos de personas mencionadas.
         Link directo.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
