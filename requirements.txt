@@ -3,8 +3,3 @@ google-generativeai
 requests
 beautifulsoup4
 pytz
-googlesearch-pythongoogle-generativeai
-requests
-beautifulsoup4
-pytz
-python-docx
