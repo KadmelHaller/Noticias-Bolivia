@@ -59,7 +59,12 @@ def procesar_ia(datos_crudos):
         prompt = f"""
         FECHA: {fecha_hoy}. Reporte técnico. 
         Divide en: 1. COCHABAMBA/TARIJA | 2. SANTA CRUZ. 
-        Formato: **TITULAR**, **MEDIO**, Resumen 5 líneas, Link sin etiqueta.
+
+        FORMATO ESTRICTO:
+        **TITULAR EN MAYÚSCULAS Y NEGRITA**
+        **MEDIO EN MAYÚSCULAS Y NEGRITA**
+        Resumen técnico en 5 líneas, redacción periodística, no cambiar cargos ni nombres mencionados en las notas en ningún caso.
+        Link sin etiqueta, formato de enlace de Microsoft Word.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
@@ -78,7 +83,7 @@ if api_key:
         with st.spinner("Procesando noticias..."):
             datos = buscar_noticias()
             if datos:
-                st.text_area("RESULTADOS PARA COPIAR:", value=procesar_ia(datos), height=500)
+                st.text_area("RESULTADOS DEL MONITOREO:", value=procesar_ia(datos), height=500)
             else:
                 st.warning("No se hallaron noticias relevantes hoy.")
 else:
