@@ -104,3 +104,23 @@ with col2:
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Santa Cruz"')
         st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
+
+# SECCIÓN 3: REDES (ÚLTIMA HORA)
+st.header("2. Redes Sociales (Última hora)")
+st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
+
+redes = ["Facebook", "X", "TikTok", "Instagram"]
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Cochabamba")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Cochabamba"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
+
+with col2:
+    st.subheader("Santa Cruz")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Santa Cruz"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
+
