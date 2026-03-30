@@ -3,5 +3,3 @@ requests
 beautifulsoup4
 pytz
 python-docx
-stremlit
-googlesearch-python
