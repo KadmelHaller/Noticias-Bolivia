@@ -111,7 +111,7 @@ with col2:
         st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
 
 # SECCIÓN 3: REDES (ÚLTIMA HORA)
-st.header("2. Redes Sociales (Última hora)")
+st.header("3. Redes Sociales (Última hora)")
 st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
 
 redes = ["Facebook", "X", "TikTok", "Instagram"]
