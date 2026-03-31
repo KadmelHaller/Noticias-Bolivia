@@ -7,12 +7,12 @@ import pytz
 import urllib.parse
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
+st.set_page_config(page_title="Monitoreo de Medios - CSRP - GDCBBA", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
 # Filtro de palabras clave
-KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "aduana", "gobierno", "arce", "ministro", "economia", "dolar", "banco", "subvención", "combustible", "tarija"]
+KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "gobierno", "economia", "subvención"]
 
 # --- 2. RASTREADOR DE PRENSA Y TV (SCRAPING) ---
 def buscar_noticias():
@@ -28,8 +28,8 @@ def buscar_noticias():
         {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"},
         {"n": "CADENA A", "u": "https://cadenaa.tv/", "r": "Nacional"},
         {"n": "URGENTE.BO", "u": "https://urgente.bo/", "r": "Nacional"},
-        {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/", "r": "Cochabamba"},
-        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "r": "Cochabamba"},
+        {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/", "r": "Nacional"},
+        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "r": "Nacional"},
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
         {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz"},
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Santa Cruz"}
@@ -61,8 +61,8 @@ def procesar_ia(datos_crudos):
         Divide en: 1. COCHABAMBA/TARIJA | 2. SANTA CRUZ. 
 
         FORMATO ESTRICTO:
-        **TITULAR EN MAYÚSCULAS Y NEGRITA**
-        **MEDIO EN MAYÚSCULAS Y NEGRITA**
+        *TITULAR EN MAYÚSCULAS Y NEGRITA*
+        MEDIO EN MAYÚSCULAS Y NEGRITA
         Resumen técnico en 5 líneas, redacción periodística, no cambiar cargos ni nombres mencionados en las notas en ningún caso.
         Link sin etiqueta, formato de enlace de Microsoft Word.
         """
@@ -83,7 +83,7 @@ if api_key:
         with st.spinner("Procesando noticias..."):
             datos = buscar_noticias()
             if datos:
-                st.text_area("RESULTADOS DEL MONITOREO:", value=procesar_ia(datos), height=500)
+                st.text_area("RESULTADOS:", value=procesar_ia(datos), height=500)
             else:
                 st.warning("No se hallaron noticias relevantes hoy.")
 else:
@@ -91,11 +91,11 @@ else:
 
 st.divider()
 
-# SECCIÓN 2: REDES (BÚSQUEDA INTELIGENTE SIN ERRORES)
+# SECCIÓN 2: REDES (ÚLTIMAS 24 HORAS)
 st.header("2. Redes Sociales (Últimas 24h)")
 st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
 
-redes = ["Facebook", "X", "TikTok", "Instagram"]
+redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col1, col2 = st.columns(2)
 
 with col1:
@@ -114,7 +114,7 @@ with col2:
 st.header("3. Redes Sociales (Última hora)")
 st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
 
-redes = ["Facebook", "X", "TikTok", "Instagram"]
+redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col1, col2 = st.columns(2)
 
 with col1:
