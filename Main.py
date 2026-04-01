@@ -14,7 +14,7 @@ fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 # Filtro de palabras clave
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "gobierno", "economia", "subvención"]
 
-# --- 2. RASTREADOR DE PRENSA Y TV (SCRAPING) ---
+# --- 2. RASTREADOR DE PRENSA Y TV (SCRAPING OPTIMIZADO) ---
 def buscar_noticias():
     fuentes = [
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
@@ -36,16 +36,27 @@ def buscar_noticias():
     ]
     
     hallazgos = ""
+    enlaces_vistos = set() # Para evitar noticias repetidas
+
     for f in fuentes:
         try:
-            r = requests.get(f['u'], headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
+            # Añadimos un timeout ligeramente mayor y headers más completos
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            r = requests.get(f['u'], headers=headers, timeout=12)
+            r.encoding = 'utf-8' # Forzamos codificación para evitar errores en tildes
             soup = BeautifulSoup(r.text, 'html.parser')
-            for el in soup.find_all(['h1', 'h2', 'h3', 'a']):
+
+            # Buscamos en un rango más amplio de etiquetas donde suelen estar los titulares
+            for el in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'a', 'p']):
                 texto = el.get_text().strip()
-                link = el.get('href', '')
-                if len(texto) > 30 and any(k in texto.lower() for k in KEYWORDS):
-                    full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
-                    hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
+                link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
+                
+                # Validación: Texto largo + Keywords + No repetido
+                if len(texto) > 35 and any(k in texto.lower() for k in KEYWORDS):
+                    if link and link not in enlaces_vistos:
+                        full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
+                        hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
+                        enlaces_vistos.add(link)
         except: continue
     return hallazgos
 
@@ -71,11 +82,10 @@ def procesar_ia(datos_crudos):
     except Exception as e:
         return f"Error en IA: {str(e)}"
 
-# --- 4. INTERFAZ ---
+# --- 4. INTERFAZ (SECCIONES DE REDES SE MANTIENEN IGUAL) ---
 st.title(f"Monitor Estratégico: {fecha_hoy}")
 api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
-# SECCIÓN 1: PRENSA
 st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
@@ -94,16 +104,13 @@ st.divider()
 # SECCIÓN 2: REDES (ÚLTIMAS 24 HORAS)
 st.header("2. Redes Sociales (Últimas 24h)")
 st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
-
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col1, col2 = st.columns(2)
-
 with col1:
     st.subheader("Cochabamba")
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Cochabamba"')
         st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
-
 with col2:
     st.subheader("Santa Cruz")
     for r in redes:
@@ -113,19 +120,14 @@ with col2:
 # SECCIÓN 3: REDES (ÚLTIMA HORA)
 st.header("3. Redes Sociales (Última hora)")
 st.caption("Haz clic en los enlaces para ver menciones de influencers y opinión pública:")
-
-redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-col1, col2 = st.columns(2)
-
-with col1:
+col1_h, col2_h = st.columns(2)
+with col1_h:
     st.subheader("Cochabamba")
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Cochabamba"')
         st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
-
-with col2:
+with col2_h:
     st.subheader("Santa Cruz")
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Santa Cruz"')
         st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
-
