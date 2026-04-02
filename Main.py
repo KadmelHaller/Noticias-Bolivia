@@ -84,14 +84,11 @@ def procesar_ia(datos_crudos):
         
         ORDEN: Presenta las noticias agrupadas por MEDIO DE COMUNICACIÓN en orden alfabético.
 
-        En cabecera muestra una sola vez:
-        🔴 Impuestos / Fiscal, 🟡 Economía / Finanzas, 🟢 Gobierno / Política
-
-        FORMATO ESTRICTO:
-        *TITULAR EN MAYÚSCULAS Y NEGRITA*
-        MEDIO(S): [NOMBRE EN MAYÚSCULAS]
+        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
+        *TITULAR EXACTO DE LA NOTA EN MAYÚSCULAS*
+        MEDIO O MEDIOS DE COMUNICACIÓN
         Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres.
-        Links: (Lista de todos los enlaces correspondientes)
+        Enlaces (Lista de todos los enlaces correspondientes sin etiquetas)
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
