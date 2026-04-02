@@ -21,7 +21,6 @@ def buscar_noticias():
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
         {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/", "r": "Nacional"},
         {"n": "ERBOL", "u": "https://erbol.com.bo/", "r": "Nacional"},
-        {"n": "FIDES", "u": "https://www.radiofides.com/", "r": "Nacional"},
         {"n": "EJU.TV", "u": "https://eju.tv/", "r": "Nacional"},
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
@@ -57,18 +56,16 @@ def buscar_noticias():
                 
                 texto_lower = texto.lower()
                 
-                # Filtro de Relevancia (Keywords) y Limpieza (Blacklist)
                 if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
                     if not any(b in texto_lower for b in BLACKLIST_TOPICS):
                         if link and link not in enlaces_vistos:
                             full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
-                            # Enviamos los datos crudos; la IA se encargará de agrupar por medio y similitud
                             hallazgos += f"MEDIO: {f['n']} | NOTICIA: {texto} | LINK: {full_link}\n"
                             enlaces_vistos.add(link)
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (AGRUPACIÓN Y SÍNTESIS) ---
+# --- 3. ANALISTA IA (ESTRICTO MISMA NOTICIA) ---
 def procesar_ia(datos_crudos):
     try:
         modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -80,18 +77,21 @@ def procesar_ia(datos_crudos):
         Muestra todas las noticias nacionales encontradas hoy. 
         RESTRICCIONES: Sin deportes, farándula, espectáculos o noticias internacionales de otros países.
         
-        INSTRUCCIÓN DE AGRUPACIÓN: 
-        1. Si la misma noticia (mismo hecho) aparece en varios medios, redacta UN SOLO RESUMEN técnico.
-        2. Debajo de ese resumen, coloca TODOS los links de los medios que cubrieron esa noticia.
-        3. Si la noticia es única de un medio, preséntala normalmente.
+        INSTRUCCIÓN DE AGRUPACIÓN ESTRICTA: 
+        1. SOLO si la misma noticia exacta (el mismo hecho) aparece en varios medios, redacta UN SOLO RESUMEN técnico. No agrupes noticias solo porque hablen del mismo tema general; deben ser sobre el mismo suceso.
+        2. Debajo de ese resumen, coloca TODOS los links de los medios que cubrieron ese hecho exacto.
+        3. Si la noticia es única, preséntala de forma independiente.
         
-        ORDEN: Agrupa los bloques resultantes alfabéticamente por el nombre del primer medio mencionado.
+        ORDEN: Presenta las noticias agrupadas por MEDIO DE COMUNICACIÓN en orden alfabético.
 
-        FORMATO ESTRICTO POR NOTICIA, SIN SÍMBOLOS ADICIONALES:
+        En cabecera muestra una sola vez:
+        🔴 Impuestos / Fiscal, 🟡 Economía / Finanzas, 🟢 Gobierno / Política
+
+        FORMATO ESTRICTO:
         *TITULAR EN MAYÚSCULAS Y NEGRITA*
-        MEDIOS: [NOMBRE DE LOS MEDIOS EN MAYÚSCULAS SEPARADOS POR COMAS]
+        MEDIO(S): [NOMBRE EN MAYÚSCULAS]
         Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres.
-        Links: (Lista de todos los enlaces sin etiqueta)
+        Links: (Lista de todos los enlaces correspondientes)
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
@@ -106,12 +106,12 @@ st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
     if st.button("🚀 Iniciar Escaneo de Medios"):
-        with st.spinner("Procesando todas las noticias nacionales..."):
+        with st.spinner("Procesando noticias nacionales..."):
             datos = buscar_noticias()
             if datos:
                 st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
             else:
-                st.warning("No se hallaron noticias relevantes en este momento.")
+                st.warning("No se hallaron noticias relevantes.")
 else:
     st.info("Ingresa tu API Key en la izquierda.")
 
