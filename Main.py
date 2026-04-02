@@ -65,7 +65,7 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (ESTRICTO MISMA NOTICIA) ---
+# --- 3. ANALISTA IA (PROHIBICIÓN TOTAL DE AGRUPAR POR SIMILITUD) ---
 def procesar_ia(datos_crudos):
     try:
         modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -74,21 +74,23 @@ def procesar_ia(datos_crudos):
         
         prompt = f"""
         FECHA ACTUAL: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
-        Muestra todas las noticias nacionales encontradas hoy. 
-        RESTRICCIONES: Sin deportes, farándula, espectáculos o noticias internacionales de otros países.
-        
-        INSTRUCCIÓN DE AGRUPACIÓN ESTRICTA: 
-        1. SOLO si la misma noticia exacta (el mismo hecho) aparece en varios medios, redacta UN SOLO RESUMEN técnico. No agrupes noticias solo porque hablen del mismo tema general; deben ser sobre el mismo suceso.
-        2. Debajo de ese resumen, coloca TODOS los links de los medios que cubrieron ese hecho exacto.
-        3. Si la noticia es única, preséntala de forma independiente.
-        
-        ORDEN: Presenta las noticias agrupadas por MEDIO DE COMUNICACIÓN en orden alfabético.
+        Muestra las noticias nacionales encontradas hoy.
 
-        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
-        *TITULAR EXACTO DE LA NOTA EN MAYÚSCULAS*
-        MEDIO O MEDIOS DE COMUNICACIÓN
-        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres.
-        Enlaces (Lista de todos los enlaces correspondientes sin etiquetas)
+        REGLAS CRÍTICAS DE AGRUPACIÓN:
+        1. ESTÁ TERMINANTEMENTE PROHIBIDO agrupar noticias solo porque traten el mismo tema (ej. no juntes dos noticias distintas solo porque ambas hablen de "dólares" o "impuestos").
+        2. SOLO se permite agrupar si es EXACTAMENTE LA MISMA NOTICIA (el mismo hecho específico reportado por distintos medios).
+        3. Si tienes dudas, NO AGRUPES. Prefiero ver la noticia repetida a que mezcles hechos distintos.
+
+        RESTRICCIONES DE CONTENIDO:
+        - Borra deportes, farándula, espectáculos o noticias internacionales.
+
+        ORDEN: Alfabético por MEDIO DE COMUNICACIÓN.
+
+        FORMATO ESTRICTO:
+        *TITULAR EXACTO EN MAYÚSCULAS*
+        MEDIO(S): [NOMBRE EN MAYÚSCULAS]
+        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta.
+        Enlaces (Lista de URLs sin etiquetas adicionales)
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
