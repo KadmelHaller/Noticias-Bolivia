@@ -7,7 +7,7 @@ import pytz
 import urllib.parse
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Monitor Estratégico Bolivia - Semáforo", layout="wide")
+st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
@@ -25,7 +25,7 @@ def obtener_marca(texto):
     if any(k in texto_l for k in CAT_GREEN): return "🟢"
     return "⚪"
 
-# --- 2. RASTREADOR DE PRENSA (AMPLIADO) ---
+# --- 2. RASTREADOR DE PRENSA (NACIONAL Y REGIONAL) ---
 def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
@@ -81,9 +81,8 @@ def procesar_ia(datos_crudos):
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
-        FECHA: {fecha_hoy}. Reporte técnico. 
-        Clasifica las noticias por región pero MANTÉN EL CÍRCULO DE COLOR (MARCA) al inicio de cada titular.
-        Prioriza agrupar en: 1. NACIONAL/BOLIVIA | 2. COCHABAMBA/TARIJA | 3. SANTA CRUZ.
+        FECHA: {fecha_hoy}. Reporte técnico nacional. 
+        Clasifica las noticias por región (Nacional, Cochabamba/Tarija, Santa Cruz) pero MANTÉN EL CÍRCULO DE COLOR (MARCA) al inicio de cada titular.
 
         FORMATO ESTRICTO:
         [MARCA] *TITULAR EN MAYÚSCULAS Y NEGRITA*
@@ -102,7 +101,7 @@ api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
 st.sidebar.markdown("""
 **Leyenda de Marcas:**
-🔴 Impuestos / Fiscal
+🔴 Impuestos
 🟡 Economía / Finanzas
 🟢 Gobierno / Política
 """)
@@ -117,23 +116,24 @@ if api_key:
                 st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
             else:
                 st.warning("No se hallaron noticias relevantes hoy.")
-else:
-    st.info("Ingresa tu API Key en la izquierda.")
 
 st.divider()
 
-# SECCIÓN 2 & 3: REDES (SE MANTIENE IGUAL)
-for titulo, q_time in [("2. Redes Sociales (Últimas 24h)", "d"), ("3. Redes Sociales (Última hora)", "h")]:
-    st.header(titulo)
-    redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Cochabamba")
-        for r in redes:
-            q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Cochabamba"')
-            st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:{q_time})")
-    with col2:
-        st.subheader("Santa Cruz")
-        for r in redes:
-            q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Santa Cruz"')
-            st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:{q_time})")
+# SECCIÓN ÚNICA DE REDES SOCIALES (NACIONAL)
+redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
+
+col_24h, col_1h = st.columns(2)
+
+with col_24h:
+    st.header("2. Redes Sociales (24h)")
+    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r} (24h)](https://www.google.com/search?q={q}&tbs=qdr:d)")
+
+with col_1h:
+    st.header("3. Redes Sociales (1h)")
+    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)")
