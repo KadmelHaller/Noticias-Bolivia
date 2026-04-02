@@ -11,8 +11,8 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout=
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Filtros de contenido
-KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "economia", "dolar", "banco", "subvención", "finanzas", "gobierno", "ministro", "presidencia", "estado"]
+# Filtros de contenido (RESTABLECIDOS)
+KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "finanzas", "ministro"]
 BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
 # --- 2. RASTREADOR DE PRENSA (COBERTURA TOTAL NACIONAL) ---
@@ -65,7 +65,7 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (PROHIBICIÓN TOTAL DE AGRUPAR POR SIMILITUD) ---
+# --- 3. ANALISTA IA (PROHIBICIÓN TOTAL DE AGRUPAR) ---
 def procesar_ia(datos_crudos):
     try:
         modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -74,23 +74,23 @@ def procesar_ia(datos_crudos):
         
         prompt = f"""
         FECHA ACTUAL: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
-        Muestra las noticias nacionales encontradas hoy.
 
-        REGLAS CRÍTICAS DE AGRUPACIÓN:
-        1. ESTÁ TERMINANTEMENTE PROHIBIDO agrupar noticias solo porque traten el mismo tema (ej. no juntes dos noticias distintas solo porque ambas hablen de "dólares" o "impuestos").
-        2. SOLO se permite agrupar si es EXACTAMENTE LA MISMA NOTICIA (el mismo hecho específico reportado por distintos medios).
-        3. Si tienes dudas, NO AGRUPES. Prefiero ver la noticia repetida a que mezcles hechos distintos.
-
+        INSTRUCCIÓN OBLIGATORIA:
+        1. NO AGRUPES NINGUNA NOTICIA. Procesa cada noticia de los datos crudos una por una.
+        2. Aunque varias noticias hablen de lo mismo, preséntalas como entradas separadas.
+        3. Muestra TODAS las noticias enviadas en los datos crudos.
+        
         RESTRICCIONES DE CONTENIDO:
         - Borra deportes, farándula, espectáculos o noticias internacionales.
 
         ORDEN: Alfabético por MEDIO DE COMUNICACIÓN.
 
-        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
+        FORMATO ESTRICTO POR NOTICIA:
         *TITULAR EXACTO EN MAYÚSCULAS*
-        MEDIO O MEDIOS EN MAYÚSCULAS
+        MEDIO EN MAYÚSCULAS
         Resumen técnico real en 4 a 6 líneas, redacción periodística estricta sin cambiar ni acortar nombres ni cargos.
-        Enlaces (Lista de URLs sin etiquetas adicionales)
+        Enlace: (La URL correspondiente SIN ETIQUETA)
+        ---
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
