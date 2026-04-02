@@ -5,22 +5,17 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 import urllib.parse
-import re
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
-ahora = datetime.now(zona_horaria)
-fecha_hoy_str = ahora.strftime('%d/%m/%Y')
-# Para filtro de URL (ej: 2026/04/02 o 2026-04-02)
-patron_fecha_url = ahora.strftime('%Y/%m/%d')
-patron_fecha_alt = ahora.strftime('%Y-%m-%d')
+fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
 # Filtros de contenido
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "economia", "dolar", "banco", "subvención", "finanzas", "gobierno", "ministro", "presidencia", "estado"]
 BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
-# --- 2. RASTREADOR DE PRENSA (ORDENADO POR MEDIO Y ESTRICTO 24H) ---
+# --- 2. RASTREADOR DE PRENSA (COBERTURA TOTAL NACIONAL) ---
 def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
@@ -46,7 +41,6 @@ def buscar_noticias():
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
     ]
     
-    fuentes = sorted(fuentes, key=lambda x: x['n'])
     hallazgos = ""
     enlaces_vistos = set()
 
@@ -63,23 +57,18 @@ def buscar_noticias():
                 
                 texto_lower = texto.lower()
                 
-                # 1. Filtro de Relevancia y Blacklist
+                # Filtro de Relevancia (Keywords) y Limpieza (Blacklist)
                 if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
                     if not any(b in texto_lower for b in BLACKLIST_TOPICS):
-                        
-                        # 2. Filtro Estricto de 24 Horas
-                        # Verificamos si la URL contiene la fecha de hoy o ayer, o si el texto menciona inmediatez
-                        es_reciente = any(x in link for x in [patron_fecha_url, patron_fecha_alt]) or \
-                                      any(t in texto_lower for t in ["hoy", "hace", "minuto", "última hora"])
-                        
-                        if es_reciente and link and link not in enlaces_vistos:
+                        if link and link not in enlaces_vistos:
                             full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
-                            hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
+                            # Enviamos los datos crudos; la IA se encargará de agrupar por medio y similitud
+                            hallazgos += f"MEDIO: {f['n']} | NOTICIA: {texto} | LINK: {full_link}\n"
                             enlaces_vistos.add(link)
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA ---
+# --- 3. ANALISTA IA (AGRUPACIÓN Y SÍNTESIS) ---
 def procesar_ia(datos_crudos):
     try:
         modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -87,20 +76,22 @@ def procesar_ia(datos_crudos):
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
-        FECHA: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
-        Muestra todas las noticias nacionales encontradas. 
-        PROHIBIDO: noticias de deportes, farándula, espectáculos o internacionales.
-        ESTRICTO: Solo noticias publicadas en las últimas 24 horas.
-        ORDEN: Agrupa y presenta las noticias por MEDIO DE COMUNICACIÓN en orden alfabético.
+        FECHA ACTUAL: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
+        Muestra todas las noticias nacionales encontradas hoy. 
+        RESTRICCIONES: Sin deportes, farándula, espectáculos o noticias internacionales de otros países.
+        
+        INSTRUCCIÓN DE AGRUPACIÓN: 
+        1. Si la misma noticia (mismo hecho) aparece en varios medios, redacta UN SOLO RESUMEN técnico.
+        2. Debajo de ese resumen, coloca TODOS los links de los medios que cubrieron esa noticia.
+        3. Si la noticia es única de un medio, preséntala normalmente.
+        
+        ORDEN: Agrupa los bloques resultantes alfabéticamente por el nombre del primer medio mencionado.
 
-        En cabecera muestra una sola vez:
-        🔴 Impuestos / Fiscal, 🟡 Economía / Finanzas, 🟢 Gobierno / Política
-
-        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
+        FORMATO ESTRICTO POR NOTICIA, SIN SÍMBOLOS ADICIONALES:
         *TITULAR EN MAYÚSCULAS Y NEGRITA*
-        MEDIO EN MAYÚSCULAS Y NEGRITA
-        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres de las notas.
-        Link sin etiqueta.
+        MEDIOS: [NOMBRE DE LOS MEDIOS EN MAYÚSCULAS SEPARADOS POR COMAS]
+        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres.
+        Links: (Lista de todos los enlaces sin etiqueta)
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
@@ -115,16 +106,18 @@ st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
     if st.button("🚀 Iniciar Escaneo de Medios"):
-        with st.spinner("Procesando noticias nacionales de las últimas 24h..."):
+        with st.spinner("Procesando todas las noticias nacionales..."):
             datos = buscar_noticias()
             if datos:
                 st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
             else:
-                st.warning("No se hallaron noticias relevantes en las últimas 24 horas.")
+                st.warning("No se hallaron noticias relevantes en este momento.")
+else:
+    st.info("Ingresa tu API Key en la izquierda.")
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES
+# SECCIÓN 2: REDES SOCIALES (NACIONAL)
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col_24h, col_1h = st.columns(2)
 
