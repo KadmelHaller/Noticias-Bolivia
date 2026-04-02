@@ -86,10 +86,10 @@ def procesar_ia(datos_crudos):
 
         ORDEN: Alfabético por MEDIO DE COMUNICACIÓN.
 
-        FORMATO ESTRICTO:
+        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
         *TITULAR EXACTO EN MAYÚSCULAS*
-        MEDIO(S): [NOMBRE EN MAYÚSCULAS]
-        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta.
+        MEDIO O MEDIOS EN MAYÚSCULAS
+        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta sin cambiar ni acortar nombres ni cargos.
         Enlaces (Lista de URLs sin etiquetas adicionales)
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
