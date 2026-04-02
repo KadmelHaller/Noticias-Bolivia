@@ -11,21 +11,11 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout=
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Configuración del Semáforo
-CAT_RED = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda"]
-CAT_YELLOW = ["economia", "dolar", "banco", "subvención", "finanzas"]
-CAT_GREEN = ["gobierno", "ministro", "presidencia", "estado"]
+# Filtros de contenido
+KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "economia", "dolar", "banco", "subvención", "finanzas", "gobierno", "ministro", "presidencia", "estado"]
+BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
-KEYWORDS = CAT_RED + CAT_YELLOW + CAT_GREEN
-
-def obtener_marca(texto):
-    texto_l = texto.lower()
-    if any(k in texto_l for k in CAT_RED): return "🔴"
-    if any(k in texto_l for k in CAT_YELLOW): return "🟡"
-    if any(k in texto_l for k in CAT_GREEN): return "🟢"
-    return "⚪"
-
-# --- 2. RASTREADOR DE PRENSA (NACIONAL Y REGIONAL) ---
+# --- 2. RASTREADOR DE PRENSA (ORDENADO POR MEDIO) ---
 def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
@@ -50,6 +40,9 @@ def buscar_noticias():
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
     ]
     
+    # Ordenar fuentes alfabéticamente por nombre
+    fuentes = sorted(fuentes, key=lambda x: x['n'])
+    
     hallazgos = ""
     enlaces_vistos = set()
 
@@ -64,12 +57,14 @@ def buscar_noticias():
                 texto = el.get_text().strip()
                 link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
                 
-                if len(texto) > 35 and any(k in texto.lower() for k in KEYWORDS):
-                    if link and link not in enlaces_vistos:
-                        marca = obtener_marca(texto)
-                        full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
-                        hallazgos += f"MARCA: {marca} | MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
-                        enlaces_vistos.add(link)
+                texto_lower = texto.lower()
+                # Validación: Keywords presentes Y NO están las de la blacklist
+                if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
+                    if not any(b in texto_lower for b in BLACKLIST_TOPICS):
+                        if link and link not in enlaces_vistos:
+                            full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
+                            hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
+                            enlaces_vistos.add(link)
         except: continue
     return hallazgos
 
@@ -81,11 +76,13 @@ def procesar_ia(datos_crudos):
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
-        FECHA: {fecha_hoy}. Reporte técnico nacional. 
-        Clasifica las noticias por marca, primero ROJA, segundo AMARILLA, tercero VERDE. MANTÉN EL CÍRCULO DE COLOR (MARCA) al inicio de cada titular.
+        FECHA: {fecha_hoy}. Reporte técnico nacional BOLIVIA. 
+        Muestra todas las noticias nacionales encontradas. 
+        PROHIBIDO: noticias de deportes, farándula, espectáculos o internacionales.
+        ORDEN: Agrupa y presenta las noticias por MEDIO DE COMUNICACIÓN en orden alfabético.
 
-        FORMATO ESTRICTO, sin códigos o símbolos adicionales:
-        [MARCA] *TITULAR EN MAYÚSCULAS Y NEGRITA*
+        FORMATO ESTRICTO:
+        *TITULAR EN MAYÚSCULAS Y NEGRITA*
         MEDIO EN MAYÚSCULAS Y NEGRITA
         Resumen técnico en 5 líneas, redacción periodística, no cambiar cargos ni nombres.
         Link sin etiqueta, formato de enlace.
@@ -98,13 +95,6 @@ def procesar_ia(datos_crudos):
 # --- 4. INTERFAZ ---
 st.title(f"Monitor Estratégico Bolivia: {fecha_hoy}")
 api_key = st.sidebar.text_input("API Key Gemini:", type="password")
-
-st.sidebar.markdown("""
-**Leyenda de Marcas:**
-🔴 Impuestos
-🟡 Economía / Finanzas
-🟢 Gobierno / Política
-""")
 
 st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
@@ -119,9 +109,8 @@ if api_key:
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES
+# SECCIÓN 2: REDES SOCIALES (MANTENIDA SIN CAMBIOS)
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-
 col_24h, col_1h = st.columns(2)
 
 with col_24h:
