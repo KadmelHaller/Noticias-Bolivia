@@ -89,8 +89,8 @@ def procesar_ia(datos_crudos):
         *TITULAR EXACTO EN MAYÚSCULAS*
         MEDIO EN MAYÚSCULAS
         Resumen técnico real en 4 a 6 líneas, redacción periodística estricta sin cambiar ni acortar nombres ni cargos.
-        Enlace: (La URL correspondiente SIN ETIQUETA)
-        ---
+        Enlace (La URL correspondiente SIN ETIQUETA)
+        
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
