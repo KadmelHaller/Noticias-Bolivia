@@ -13,8 +13,8 @@ fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
 # Configuración del Semáforo
 CAT_RED = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda"]
-CAT_YELLOW = ["economia", "dolar", "banco", "subvención", "precios", "finanzas"]
-CAT_GREEN = ["gobierno", "arce", "ministro", "presidencia", "estado"]
+CAT_YELLOW = ["economia", "dolar", "banco", "subvención", "finanzas"]
+CAT_GREEN = ["gobierno", "ministro", "presidencia", "estado"]
 
 KEYWORDS = CAT_RED + CAT_YELLOW + CAT_GREEN
 
@@ -82,13 +82,13 @@ def procesar_ia(datos_crudos):
         
         prompt = f"""
         FECHA: {fecha_hoy}. Reporte técnico nacional. 
-        Clasifica las noticias por región (Nacional, Cochabamba/Tarija, Santa Cruz) pero MANTÉN EL CÍRCULO DE COLOR (MARCA) al inicio de cada titular.
+        Clasifica las noticias por marca, primero ROJA, segundo AMARILLA, tercero VERDE. MANTÉN EL CÍRCULO DE COLOR (MARCA) al inicio de cada titular.
 
-        FORMATO ESTRICTO:
+        FORMATO ESTRICTO, sin códigos o símbolos adicionales:
         [MARCA] *TITULAR EN MAYÚSCULAS Y NEGRITA*
         MEDIO EN MAYÚSCULAS Y NEGRITA
         Resumen técnico en 5 líneas, redacción periodística, no cambiar cargos ni nombres.
-        Link sin etiqueta, formato de enlace de Microsoft Word.
+        Link sin etiqueta, formato de enlace.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
@@ -119,7 +119,7 @@ if api_key:
 
 st.divider()
 
-# SECCIÓN ÚNICA DE REDES SOCIALES (NACIONAL)
+# SECCIÓN 2: REDES SOCIALES
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 
 col_24h, col_1h = st.columns(2)
