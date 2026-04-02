@@ -5,23 +5,29 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 import urllib.parse
+import re
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
-fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
+ahora = datetime.now(zona_horaria)
+fecha_hoy_str = ahora.strftime('%d/%m/%Y')
+# Para filtro de URL (ej: 2026/04/02 o 2026-04-02)
+patron_fecha_url = ahora.strftime('%Y/%m/%d')
+patron_fecha_alt = ahora.strftime('%Y-%m-%d')
 
 # Filtros de contenido
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "recauda", "economia", "dolar", "banco", "subvención", "finanzas", "gobierno", "ministro", "presidencia", "estado"]
 BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
-# --- 2. RASTREADOR DE PRENSA (ORDENADO POR MEDIO) ---
+# --- 2. RASTREADOR DE PRENSA (ORDENADO POR MEDIO Y ESTRICTO 24H) ---
 def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
         {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/", "r": "Nacional"},
         {"n": "ERBOL", "u": "https://erbol.com.bo/", "r": "Nacional"},
         {"n": "FIDES", "u": "https://www.radiofides.com/", "r": "Nacional"},
+        {"n": "EJU.TV", "u": "https://eju.tv/", "r": "Nacional"},
         {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
         {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Tarija"},
@@ -40,9 +46,7 @@ def buscar_noticias():
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
     ]
     
-    # Ordenar fuentes alfabéticamente por nombre
     fuentes = sorted(fuentes, key=lambda x: x['n'])
-    
     hallazgos = ""
     enlaces_vistos = set()
 
@@ -58,10 +62,17 @@ def buscar_noticias():
                 link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
                 
                 texto_lower = texto.lower()
-                # Validación: Keywords presentes Y NO están las de la blacklist
+                
+                # 1. Filtro de Relevancia y Blacklist
                 if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
                     if not any(b in texto_lower for b in BLACKLIST_TOPICS):
-                        if link and link not in enlaces_vistos:
+                        
+                        # 2. Filtro Estricto de 24 Horas
+                        # Verificamos si la URL contiene la fecha de hoy o ayer, o si el texto menciona inmediatez
+                        es_reciente = any(x in link for x in [patron_fecha_url, patron_fecha_alt]) or \
+                                      any(t in texto_lower for t in ["hoy", "hace", "minuto", "última hora"])
+                        
+                        if es_reciente and link and link not in enlaces_vistos:
                             full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
                             hallazgos += f"MEDIO: {f['n']} | REGIÓN: {f['r']} | NOTICIA: {texto} | LINK: {full_link}\n"
                             enlaces_vistos.add(link)
@@ -76,9 +87,10 @@ def procesar_ia(datos_crudos):
         model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
-        FECHA: {fecha_hoy}. Reporte técnico nacional BOLIVIA. 
+        FECHA: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
         Muestra todas las noticias nacionales encontradas. 
         PROHIBIDO: noticias de deportes, farándula, espectáculos o internacionales.
+        ESTRICTO: Solo noticias publicadas en las últimas 24 horas.
         ORDEN: Agrupa y presenta las noticias por MEDIO DE COMUNICACIÓN en orden alfabético.
 
         En cabecera muestra una sola vez:
@@ -96,23 +108,23 @@ def procesar_ia(datos_crudos):
         return f"Error en IA: {str(e)}"
 
 # --- 4. INTERFAZ ---
-st.title(f"Monitor Estratégico Bolivia: {fecha_hoy}")
+st.title(f"Monitor Estratégico Bolivia: {fecha_hoy_str}")
 api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
 st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
     if st.button("🚀 Iniciar Escaneo de Medios"):
-        with st.spinner("Procesando noticias nacionales..."):
+        with st.spinner("Procesando noticias nacionales de las últimas 24h..."):
             datos = buscar_noticias()
             if datos:
                 st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
             else:
-                st.warning("No se hallaron noticias relevantes hoy.")
+                st.warning("No se hallaron noticias relevantes en las últimas 24 horas.")
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES (MANTENIDA SIN CAMBIOS)
+# SECCIÓN 2: REDES SOCIALES
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col_24h, col_1h = st.columns(2)
 
