@@ -81,11 +81,14 @@ def procesar_ia(datos_crudos):
         PROHIBIDO: noticias de deportes, farándula, espectáculos o internacionales.
         ORDEN: Agrupa y presenta las noticias por MEDIO DE COMUNICACIÓN en orden alfabético.
 
-        FORMATO ESTRICTO:
+        En cabecera muestra una sola vez:
+        🔴 Impuestos / Fiscal, 🟡 Economía / Finanzas, 🟢 Gobierno / Política
+
+        FORMATO ESTRICTO SIN SÍMBOLOS ADICIONALES:
         *TITULAR EN MAYÚSCULAS Y NEGRITA*
         MEDIO EN MAYÚSCULAS Y NEGRITA
-        Resumen técnico en 5 líneas, redacción periodística, no cambiar cargos ni nombres.
-        Link sin etiqueta, formato de enlace.
+        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta, no cambiar ni acortar cargos ni nombres de las notas.
+        Link sin etiqueta.
         """
         res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
         return res.text
