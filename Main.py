@@ -22,7 +22,6 @@ def buscar_noticias():
         {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/", "r": "Nacional"},
         {"n": "ERBOL", "u": "https://erbol.com.bo/", "r": "Nacional"},
         {"n": "EJU.TV", "u": "https://eju.tv/", "r": "Nacional"},
-        {"n": "OPINIÓN", "u": "https://www.opinion.com.bo/", "r": "Cochabamba"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
         {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Tarija"},
         {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
