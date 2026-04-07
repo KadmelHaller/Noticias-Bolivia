@@ -87,7 +87,7 @@ def procesar_ia(datos_crudos):
         FORMATO ESTRICTO POR NOTICIA:
         *TITULAR EXACTO EN MAYÚSCULAS*
         MEDIO EN MAYÚSCULAS
-        Resumen técnico real en 4 a 6 líneas, redacción periodística estricta sin cambiar ni acortar nombres ni cargos.
+        Copia los primeros dos párrafos del cuerpo de la nota y júntalos en un solo párrafo, no tomes en cuenta el lead o entradilla. NO cambies ni acortes nombres ni cargos, sin excepción.
         Enlace (La URL correspondiente SIN ETIQUETA)
         
         """
