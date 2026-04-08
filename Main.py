@@ -87,7 +87,7 @@ def procesar_ia(datos_crudos):
         FORMATO ESTRICTO POR NOTICIA:
         *TITULAR EXACTO EN MAYÚSCULAS*
         MEDIO EN MAYÚSCULAS
-        Extrae palabra por palabra los primeros 2 a 3 párrafos del cuerpo de la nota, combinados en un solo parrafo, sin cambios en el texto para que sean entre 4 a 6 líneas.
+        Extrae palabra por palabra los primeros 2 a 3 párrafos del cuerpo de la nota, combinados en un solo parrafo, sin cambios en el texto para que sean entre 4 a 6 líneas, NADA MENOS.
         Enlace (La URL correspondiente SIN ETIQUETA)
         
         """
