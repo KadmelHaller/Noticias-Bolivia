@@ -12,7 +12,7 @@ st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout=
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Filtros de contenido (RESTRICTOS SEGÚN TU SOLICITUD)
+# Filtros de contenido (RESTABLECIDOS EXACTAMENTE)
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "finanzas", "ministro"]
 BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
@@ -53,6 +53,7 @@ def buscar_noticias():
             for el in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'a']):
                 texto = el.get_text().strip()
                 link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
+                
                 texto_lower = texto.lower()
                 
                 if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
@@ -64,13 +65,16 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (MANEJO DE CUOTA Y FIX DE MODELO) ---
+# --- 3. ANALISTA IA (Detección dinámica de modelo y manejo de cuota) ---
 def procesar_ia(datos_crudos):
     if not datos_crudos: return "No se encontraron noticias."
     
     try:
-        # Identificador corregido para evitar 404
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Detectar el nombre correcto del modelo para evitar el error 404
+        modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Buscamos '1.5-flash', si no está, usamos el primero que acepte generación de contenido
+        modelo_id = next((m for m in modelos_visibles if "1.5-flash" in m), modelos_visibles[0])
+        model = genai.GenerativeModel(modelo_id)
         
         prompt = f"""
         FECHA ACTUAL: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
@@ -98,7 +102,7 @@ def procesar_ia(datos_crudos):
                 return res.text
             except Exception as e:
                 if "429" in str(e):
-                    st.warning(f"Cuota excedida. Reintentando en 30s... ({attempt+1}/3)")
+                    st.warning(f"Límite de API alcanzado. Esperando 30s... ({attempt+1}/3)")
                     time.sleep(30)
                     continue
                 else: raise e
@@ -124,7 +128,7 @@ else:
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES (NACIONAL - FORMATO ORIGINAL RESTAURADO)
+# SECCIÓN 2: REDES SOCIALES (24h y 1h - FORMATO ORIGINAL RESTAURADO)
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col_24h, col_1h = st.columns(2)
 
