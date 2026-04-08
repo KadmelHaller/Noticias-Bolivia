@@ -7,17 +7,17 @@ import pytz
 import urllib.parse
 import time
 
-# --- 1. CONFIGURACIÓN INICIAL ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
-fecha_hoy = datetime.now(zona_horaria).strftime('%d/%m/%Y')
+fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Filtros de búsqueda
-KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "finanzas", "ministro", "economía", "aduana"]
-BLACKLIST = ["deporte", "fútbol", "farandula", "show", "internacional", "entretenimiento"]
+# Filtros más amplios para asegurar captura
+KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "finanzas", "ministro", "económ", "itf", "dólar", "aduana", "presupuesto"]
+BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
-# --- 2. MOTOR DE BÚSQUEDA DE MEDIOS (NUEVO) ---
-def obtener_noticias_bolivia():
+# --- 2. RASTREADOR DE PRENSA (TODOS TUS MEDIOS) ---
+def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/"},
         {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/"},
@@ -40,125 +40,99 @@ def obtener_noticias_bolivia():
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/"}
     ]
     
-    resultados_crudos = []
+    lista_noticias = []
     enlaces_vistos = set()
-    
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
-    for fuente in fuentes:
+    for f in fuentes:
         try:
-            response = requests.get(fuente['url'], headers=headers, timeout=10)
-            response.encoding = 'utf-8'
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Buscamos todos los enlaces que contengan texto
-            for link in soup.find_all('a', href=True):
-                texto = link.get_text().strip()
-                href = link['href']
+            r = requests.get(f['u'], headers=headers, timeout=12)
+            r.encoding = 'utf-8'
+            soup = BeautifulSoup(r.text, 'html.parser')
+
+            # Buscamos en enlaces y también en contenedores comunes de titulares
+            for el in soup.find_all(['a', 'h1', 'h2', 'h3']):
+                texto = el.get_text().strip()
+                link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
                 
-                # Validación de relevancia
-                if len(texto) > 25 and any(k in texto.lower() for k in KEYWORDS):
-                    if not any(b in texto.lower() for b in BLACKLIST):
-                        if href not in enlaces_vistos:
-                            full_url = href if href.startswith('http') else fuente['url'].rstrip('/') + "/" + href.lstrip('/')
-                            resultados_crudos.append({
-                                "medio": fuente['nombre'],
-                                "titular": texto,
-                                "url": full_url
-                            })
-                            enlaces_vistos.add(href)
-        except:
-            continue
-            
-    return resultados_crudos
+                texto_lower = texto.lower()
+                
+                if len(texto) > 25 and any(k in texto_lower for k in KEYWORDS):
+                    if not any(b in texto_lower for b in BLACKLIST_TOPICS):
+                        if link and link not in enlaces_vistos:
+                            full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
+                            lista_noticias.append(f"MEDIO: {f['n']} | NOTICIA: {texto} | LINK: {full_link}")
+                            enlaces_vistos.add(link)
+        except: continue
+    return lista_noticias
 
-# --- 3. PROCESAMIENTO CON IA (SIMPLIFICADO) ---
-def procesar_con_ia(lista_noticias, api_key):
-    if not lista_noticias:
-        return "No se encontraron noticias con los filtros actuales."
+# --- 3. ANALISTA IA (BATCHING DE SEGURIDAD) ---
+def procesar_ia(noticias_lista, key):
+    if not noticias_lista: return "No se hallaron noticias con los criterios actuales."
     
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=key)
+    # Detección dinámica de modelo
+    modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    modelo_id = next((m for m in modelos if "flash" in m), modelos[0])
+    model = genai.GenerativeModel(modelo_id)
     
-    # Intentar detectar el modelo disponible automáticamente
-    try:
-        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        modelo_id = next((m for m in modelos if "flash" in m), modelos[0])
-        model = genai.GenerativeModel(modelo_id)
-    except:
-        return "Error al conectar con los modelos de Google. Verifica tu API Key."
-
-    reporte_final = ""
-    
-    # Procesamos en grupos pequeños para evitar el error de cuota 429
-    for i in range(0, len(lista_noticias), 3):
-        grupo = lista_noticias[i:i+3]
-        contexto = "\n".join([f"MEDIO: {n['medio']} | TITULAR: {n['titular']} | LINK: {n['url']}" for n in grupo])
-        
+    reporte = ""
+    # Procesar de 3 en 3 para evitar errores 429
+    for i in range(0, len(noticias_lista), 3):
+        bloque = "\n".join(noticias_lista[i:i+3])
         prompt = f"""
-        Actúa como un analista político en Bolivia. Fecha: {fecha_hoy}.
-        Para cada noticia en los DATOS, genera el siguiente formato:
-        
+        FECHA: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA.
+        INSTRUCCIÓN: Procesa cada noticia individualmente. NO AGRUPES.
+        FORMATO POR NOTICIA:
         *TITULAR EN MAYÚSCULAS*
         MEDIO EN MAYÚSCULAS
-        Redacta un resumen de 4 a 6 líneas sobre la importancia económica o fiscal de esta noticia en Bolivia.
-        URL (del dato original)
+        Resumen de 4 a 6 líneas detallando el impacto económico o fiscal.
+        URL
         ---
-        DATOS:
-        {contexto}
+        DATOS CRUDOS:
+        {bloque}
         """
-        
         try:
-            response = model.generate_content(prompt)
-            reporte_final += response.text + "\n\n"
-            time.sleep(2) # Pausa para respetar la cuota
+            res = model.generate_content(prompt)
+            reporte += res.text + "\n\n"
+            time.sleep(1.5) # Pausa mínima antipánico
         except Exception as e:
             if "429" in str(e):
-                st.error("Límite de cuota alcanzado. Esperando...")
-                time.sleep(10)
-            else:
-                reporte_final += f"\n(Error al procesar bloque: {str(e)})\n"
-                
-    return reporte_final
-
-# --- 4. INTERFAZ DE USUARIO ---
-st.title(f"Monitor Estratégico Bolivia | {fecha_hoy}")
-
-with st.sidebar:
-    st.header("Configuración")
-    key = st.text_input("Gemini API Key:", type="password")
-    st.info("Este monitor rastrea noticias fiscales y económicas en los principales medios nacionales.")
-
-st.header("1. Prensa y TV (Nacional)")
-
-if st.button("🔍 Iniciar Monitoreo"):
-    if not key:
-        st.error("Por favor, introduce tu API Key.")
-    else:
-        with st.spinner("Rastreando medios bolivianos..."):
-            noticias = obtener_noticias_bolivia()
+                time.sleep(10) # Si hay saturación, esperamos
+            reporte += f"\n(Error en bloque: {str(e)})\n"
             
-            if noticias:
-                st.success(f"Se encontraron {len(noticias)} noticias potenciales.")
-                resultado = procesar_con_ia(noticias, key)
-                st.text_area("REPORTE GENERADO:", value=resultado, height=500)
+    return reporte
+
+# --- 4. INTERFAZ ---
+st.title(f"Monitor Estratégico Bolivia: {fecha_hoy_str}")
+api_key = st.sidebar.text_input("Gemini API Key:", type="password")
+
+if st.button("🚀 Iniciar Escaneo"):
+    if not api_key:
+        st.error("Introduce la API Key")
+    else:
+        with st.spinner("Rastreando medios..."):
+            datos = buscar_noticias()
+            if datos:
+                st.info(f"Hallazgos crudos: {len(datos)}")
+                reporte_ia = procesar_ia(datos, api_key)
+                st.text_area("REPORTE:", value=reporte_ia, height=600)
             else:
-                st.warning("No se hallaron noticias que coincidan con los filtros de hoy.")
+                st.warning("No se encontraron noticias. Intenta ampliar los filtros.")
 
 st.divider()
 
-# --- 5. BLOQUE DE REDES SOCIALES (CONSERVADO) ---
-st.header("2. Pulso en Redes Sociales")
+# --- 5. REDES SOCIALES ---
+st.header("Pulso en Redes Sociales")
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Últimas 24 Horas")
+c1, c2 = st.columns(2)
+with c1:
+    st.subheader("Últimas 24h")
     for r in redes:
-        query = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Buscar en {r} (24h)](https://www.google.com/search?q={query}&tbs=qdr:d)")
-
-with col2:
-    st.subheader("Última Hora")
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
+with c2:
+    st.subheader("Última hora")
     for r in redes:
-        query = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Buscar en {r} (1h)](https://www.google.com/search?q={query}&tbs=qdr:h)")
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
