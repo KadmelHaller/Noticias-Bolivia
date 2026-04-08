@@ -64,12 +64,12 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (MANEJO DE CUOTA Y ERROR 404) ---
+# --- 3. ANALISTA IA (MANEJO DE CUOTA Y FIX DE MODELO) ---
 def procesar_ia(datos_crudos):
     if not datos_crudos: return "No se encontraron noticias."
     
     try:
-        # Cambio de identificador para evitar el error 404
+        # Identificador corregido para evitar 404
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
@@ -124,7 +124,7 @@ else:
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES (NACIONAL - RESTAURADO A TU FORMATO ORIGINAL)
+# SECCIÓN 2: REDES SOCIALES (NACIONAL - FORMATO ORIGINAL RESTAURADO)
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col_24h, col_1h = st.columns(2)
 
