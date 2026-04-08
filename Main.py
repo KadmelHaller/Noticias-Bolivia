@@ -8,7 +8,7 @@ import urllib.parse
 import time
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
+st.set_page_config(page_title="Monitor Estratégico Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
@@ -23,19 +23,9 @@ def buscar_noticias():
         {"n": "ERBOL", "u": "https://erbol.com.bo/"},
         {"n": "EJU.TV", "u": "https://eju.tv/"},
         {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/"},
-        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/"},
         {"n": "UNITEL", "u": "https://unitel.bo/"},
-        {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/"},
-        {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/"},
         {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/"},
-        {"n": "ATB", "u": "https://www.atb.com.bo/"},
-        {"n": "RED UNO", "u": "https://www.reduno.com.bo/"},
-        {"n": "CADENA A", "u": "https://cadenaa.tv/"},
-        {"n": "URGENTE.BO", "u": "https://urgente.bo/"},
-        {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/"},
-        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/"},
         {"n": "EL DEBER", "u": "https://eldeber.com.bo/"},
-        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/"},
         {"n": "VISIÓN 360", "u": "https://www.vision360.bo/"}
     ]
     
@@ -63,52 +53,45 @@ def buscar_noticias():
         except: continue
     return lista_noticias
 
-# --- 3. ANALISTA IA (CON MANEJO DE CUOTA REFORZADO) ---
+# --- 3. ANALISTA IA (DETECCIÓN AUTOMÁTICA DE MODELO Y LOTES) ---
 def procesar_ia_lotes(lista_noticias):
-    if not lista_noticias: return "No se hallaron datos crudos."
+    if not lista_noticias: return "No se hallaron noticias."
     
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash") # Usamos Flash 1.5 que es el más estable en cuota
+        # DETECCIÓN DINÁMICA: Buscamos qué modelo acepta tu API
+        modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
+        # Prioridad 1: gemini-1.5-flash | Prioridad 2: gemini-pro | Prioridad 3: el primero que sirva
+        modelo_final = next((m for m in modelos_disponibles if "1.5-flash" in m), 
+                            next((m for m in modelos_disponibles if "pro" in m), modelos_disponibles[0]))
+        
+        model = genai.GenerativeModel(modelo_final)
         resultado_final = ""
-        # Procesamos de 3 en 3 para no saturar la cuota diaria
         lotes = [lista_noticias[i:i + 3] for i in range(0, len(lista_noticias), 3)]
         
         progreso = st.progress(0)
         for idx, lote in enumerate(lotes):
             datos_bloque = "\n".join(lote)
-            prompt = f"""
-            FECHA: {fecha_hoy_str}. Reporte nacional BOLIVIA. 
-            NO AGRUPES. Procesa cada noticia individualmente.
-            FORMATO:
-            *TITULAR EN MAYÚSCULAS*
-            MEDIO EN MAYÚSCULAS
-            Extrae de forma coherente el contenido: 4 a 6 líneas de texto continuo.
-            URL (sin etiquetas)
-            ---
-            """
+            prompt = f"FECHA: {fecha_hoy_str}. Reporte nacional BOLIVIA. NO AGRUPES. Procesa cada noticia individualmente. FORMATO: *TITULAR EN MAYÚSCULAS*, MEDIO EN MAYÚSCULAS, Contenido de 4 a 6 líneas, URL."
             
-            # Reintento en caso de error 429
-            exito = False
             for intento in range(3):
                 try:
                     res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_bloque)
                     resultado_final += res.text + "\n\n"
-                    exito = True
                     break
                 except Exception as e:
-                    if "429" in str(e):
-                        time.sleep(10) # Espera técnica para liberar cuota
-                    else:
-                        resultado_final += f"\nError en lote: {str(e)}\n"
+                    if "429" in str(e): # Error de Cuota
+                        time.sleep(12)
+                    else: 
+                        resultado_final += f"Error en lote: {str(e)}\n"
                         break
             
             progreso.progress((idx + 1) / len(lotes))
-            time.sleep(2) # Pausa entre llamadas para no ser detectado como bot masivo
+            time.sleep(2)
             
         return resultado_final
     except Exception as e:
-        return f"Error crítico: {str(e)}"
+        return f"Error crítico al detectar modelo: {str(e)}"
 
 # --- 4. INTERFAZ ---
 st.title(f"Monitor Estratégico Bolivia: {fecha_hoy_str}")
@@ -117,30 +100,28 @@ api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 if api_key:
     genai.configure(api_key=api_key)
     if st.button("🚀 Iniciar Escaneo"):
-        with st.spinner("Escaneando medios y procesando por lotes..."):
+        with st.spinner("Detectando modelo y procesando noticias..."):
             noticias_crudas = buscar_noticias()
             if noticias_crudas:
                 resultado = procesar_ia_lotes(noticias_crudas)
                 st.text_area("RESULTADOS:", value=resultado, height=600)
             else:
-                st.warning("No hay noticias hoy con esas palabras clave.")
+                st.warning("No se hallaron noticias con los filtros actuales.")
 else:
-    st.info("Introduce tu API Key.")
+    st.info("Introduce tu API Key en el menú lateral.")
 
 st.divider()
 
-# REDES SOCIALES
+# REDES SOCIALES (NACIONAL)
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-col1, col2 = st.columns(2)
-
-with col1:
+c1, c2 = st.columns(2)
+with c1:
     st.header("2. Redes Sociales (24h)")
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
-
-with col2:
+        st.markdown(f"🔗 [Ver {r} (24h)](https://www.google.com/search?q={q}&tbs=qdr:d)")
+with c2:
     st.header("3. Redes Sociales (1h)")
     for r in redes:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Ver en {r}](https://www.google.com/search?q={q}&tbs=qdr:h)")
+        st.markdown(f"🔗 [Ver {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)")
