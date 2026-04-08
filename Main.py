@@ -5,8 +5,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 import urllib.parse
-import time # Añadido para gestionar la espera
-from google.api_core import retry # Añadido para manejo de cuota
+import time
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
@@ -19,25 +18,25 @@ BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "
 # --- 2. RASTREADOR DE PRENSA ---
 def buscar_noticias():
     fuentes = [
-        {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
-        {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/", "r": "Nacional"},
-        {"n": "ERBOL", "u": "https://erbol.com.bo/", "r": "Nacional"},
-        {"n": "EJU.TV", "u": "https://eju.tv/", "r": "Nacional"},
-        {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/", "r": "Cochabamba"},
-        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/", "r": "Tarija"},
-        {"n": "UNITEL", "u": "https://unitel.bo/", "r": "Nacional"},
-        {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/", "r": "Nacional"},
-        {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/", "r": "Nacional"},
-        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/", "r": "Nacional"},
-        {"n": "ATB", "u": "https://www.atb.com.bo/", "r": "Nacional"},
-        {"n": "RED UNO", "u": "https://www.reduno.com.bo/", "r": "Nacional"},
-        {"n": "CADENA A", "u": "https://cadenaa.tv/", "r": "Nacional"},
-        {"n": "URGENTE.BO", "u": "https://urgente.bo/", "r": "Nacional"},
-        {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/", "r": "Nacional"},
-        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/", "r": "Nacional"},
-        {"n": "EL DEBER", "u": "https://eldeber.com.bo/", "r": "Santa Cruz"},
-        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/", "r": "Santa Cruz"},
-        {"n": "VISIÓN 360", "u": "https://www.vision360.bo/", "r": "Nacional"}
+        {"n": "LA RAZÓN", "u": "https://www.la-razon.com/"},
+        {"n": "EL DIARIO", "u": "https://www.eldiario.net/portal/"},
+        {"n": "ERBOL", "u": "https://erbol.com.bo/"},
+        {"n": "EJU.TV", "u": "https://eju.tv/"},
+        {"n": "LOS TIEMPOS", "u": "https://www.lostiempos.com/"},
+        {"n": "LA VOZ DE TARIJA", "u": "https://lavozdetarija.com/"},
+        {"n": "UNITEL", "u": "https://unitel.bo/"},
+        {"n": "RTP", "u": "https://www.rtpbolivia.com.bo/"},
+        {"n": "BOLIVISIÓN", "u": "https://www.redbolivision.tv.bo/"},
+        {"n": "BOLIVIA TV", "u": "https://www.boliviatv.bo/"},
+        {"n": "ATB", "u": "https://www.atb.com.bo/"},
+        {"n": "RED UNO", "u": "https://www.reduno.com.bo/"},
+        {"n": "CADENA A", "u": "https://cadenaa.tv/"},
+        {"n": "URGENTE.BO", "u": "https://urgente.bo/"},
+        {"n": "INNOTICIAS", "u": "https://innoticiasbo.com/"},
+        {"n": "ENFOQUE NEWS", "u": "https://enfoquenews.com.bo/"},
+        {"n": "EL DEBER", "u": "https://eldeber.com.bo/"},
+        {"n": "EL MUNDO", "u": "https://elmundo.com.bo/"},
+        {"n": "VISIÓN 360", "u": "https://www.vision360.bo/"}
     ]
     
     hallazgos = ""
@@ -45,8 +44,8 @@ def buscar_noticias():
 
     for f in fuentes:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            r = requests.get(f['u'], headers=headers, timeout=12)
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            r = requests.get(f['u'], headers=headers, timeout=10)
             r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
 
@@ -64,81 +63,67 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (CON MANEJO DE CUOTA) ---
+# --- 3. ANALISTA IA (PARCHE DE CUOTA REFORZADO) ---
 def procesar_ia(datos_crudos):
-    try:
-        modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        modelo_id = next((m for m in modelos_visibles if "1.5-flash" in m), modelos_visibles[0])
-        model = genai.GenerativeModel(modelo_id)
+    if not datos_crudos:
+        return "No se encontraron noticias."
         
-        prompt = f"""
-        FECHA ACTUAL: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
+    # Obligamos a usar 1.5-flash para mayor estabilidad en Free Tier
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    
+    prompt = f"""
+    FECHA: {fecha_hoy_str}. Reporte técnico nacional BOLIVIA. 
 
-        INSTRUCCIÓN OBLIGATORIA:
-        1. NO AGRUPES NINGUNA NOTICIA. Procesa cada noticia de los datos crudos una por una.
-        2. Aunque varias noticias hablen de lo mismo, preséntalas como entradas separadas.
-        3. Muestra TODAS las noticias enviadas en los datos crudos.
-        
-        RESTRICCIONES DE CONTENIDO:
-        - Borra deportes, farándula, espectáculos o noticias internacionales.
+    INSTRUCCIÓN:
+    1. PROCESA CADA NOTA POR SEPARADO. NO AGRUPES.
+    2. FORMATO: 
+       *TITULAR EN MAYÚSCULAS*
+       MEDIO EN MAYÚSCULAS
+       Extrae palabra por palabra los primeros 2 a 3 párrafos del cuerpo de la nota, combinados en un solo parrafo, sin cambios en el texto para que sean entre 4 a 6 líneas, NADA MENOS.
+       Enlace (URL sin etiquetas)
+    """
 
-        ORDEN: Alfabético por MEDIO DE COMUNICACIÓN.
-
-        FORMATO ESTRICTO POR NOTICIA:
-        *TITULAR EXACTO EN MAYÚSCULAS*
-        MEDIO EN MAYÚSCULAS
-        Extrae palabra por palabra los primeros 2 a 3 párrafos del cuerpo de la nota, combinados en un solo parrafo, sin cambios en el texto para que sean entre 4 a 6 líneas, NADA MENOS.
-        Enlace (La URL correspondiente SIN ETIQUETA)
-        """
-        
-        # Implementación de reintento automático si falla por cuota
-        for i in range(3): # Intentar hasta 3 veces
-            try:
-                res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        try:
+            res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
+            if res.text:
                 return res.text
-            except Exception as e:
-                if "429" in str(e): # Si es error de cuota
-                    time.sleep(30) # Esperar 30 segundos y reintentar
-                    continue
-                else:
-                    raise e
-                    
-    except Exception as e:
-        return f"Error en IA: {str(e)}"
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str:
+                # Si es error de cuota, avisamos y esperamos un ciclo completo
+                st.warning(f"Límite de API alcanzado. Esperando 60 segundos para reintentar (Intento {attempt+1}/{MAX_RETRIES})...")
+                time.sleep(60)
+                continue
+            else:
+                return f"Error crítico: {error_str}"
+    
+    return "No se pudo obtener respuesta de la IA tras varios intentos por límites de cuota de Google."
 
 # --- 4. INTERFAZ ---
 st.title(f"Monitor Estratégico Bolivia: {fecha_hoy_str}")
 api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
-st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
-    if st.button("🚀 Iniciar Escaneo de Medios"):
-        with st.spinner("Procesando noticias nacionales... (esto puede tardar si la API está saturada)"):
+    if st.button("🚀 Iniciar Escaneo"):
+        with st.spinner("Escaneando y procesando..."):
             datos = buscar_noticias()
             if datos:
-                st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
+                resultado = procesar_ia(datos)
+                st.text_area("RESULTADOS:", value=resultado, height=600)
             else:
-                st.warning("No se hallaron noticias relevantes.")
+                st.info("No hay noticias hoy con esas palabras clave.")
 else:
-    st.info("Ingresa tu API Key en la izquierda.")
+    st.info("Introduce tu API Key para comenzar.")
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES
-redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
-col_24h, col_1h = st.columns(2)
-
-with col_24h:
-    st.header("2. Redes Sociales (24h)")
-    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
-    for r in redes:
+# SECCIÓN REDES
+redes = ["Facebook", "X", "TikTok", "Instagram"]
+cols = st.columns(len(redes))
+for i, r in enumerate(redes):
+    with cols[i]:
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Ver en {r} (24h)](https://www.google.com/search?q={q}&tbs=qdr:d)")
-
-with col_1h:
-    st.header("3. Redes Sociales (1h)")
-    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
-    for r in redes:
-        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
-        st.markdown(f"🔗 [Ver en {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)")
+        st.markdown(f"[Ver {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
