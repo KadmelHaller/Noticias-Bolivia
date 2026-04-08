@@ -249,4 +249,4 @@ with col_1h:
 
         q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
 
-        st.markdown(f"🔗 [Ver en {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)")
+        st.markdown(f"🔗 [Ver en {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)") 
