@@ -5,17 +5,18 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 import urllib.parse
+import time # Añadido para gestionar la espera
+from google.api_core import retry # Añadido para manejo de cuota
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Monitor Estratégico Bolivia - Nacional", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
-# Filtros de contenido (RESTABLECIDOS)
 KEYWORDS = ["impuesto", "sin", "tribut", "factur", "fiscal", "finanzas", "ministro"]
 BLACKLIST_TOPICS = ["deporte", "fútbol", "farandula", "espectáculo", "show", "internacional", "mundial", "concierto", "cine", "entretenimiento"]
 
-# --- 2. RASTREADOR DE PRENSA (COBERTURA TOTAL NACIONAL) ---
+# --- 2. RASTREADOR DE PRENSA ---
 def buscar_noticias():
     fuentes = [
         {"n": "LA RAZÓN", "u": "https://www.la-razon.com/", "r": "Nacional"},
@@ -52,7 +53,6 @@ def buscar_noticias():
             for el in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'a']):
                 texto = el.get_text().strip()
                 link = el.get('href', '') if el.name == 'a' else (el.find('a').get('href', '') if el.find('a') else '')
-                
                 texto_lower = texto.lower()
                 
                 if len(texto) > 35 and any(k in texto_lower for k in KEYWORDS):
@@ -64,7 +64,7 @@ def buscar_noticias():
         except: continue
     return hallazgos
 
-# --- 3. ANALISTA IA (PROHIBICIÓN TOTAL DE AGRUPAR) ---
+# --- 3. ANALISTA IA (CON MANEJO DE CUOTA) ---
 def procesar_ia(datos_crudos):
     try:
         modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -89,10 +89,20 @@ def procesar_ia(datos_crudos):
         MEDIO EN MAYÚSCULAS
         Extrae palabra por palabra los primeros 2 a 3 párrafos del cuerpo de la nota, combinados en un solo parrafo, sin cambios en el texto para que sean entre 4 a 6 líneas, NADA MENOS.
         Enlace (La URL correspondiente SIN ETIQUETA)
-        
         """
-        res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
-        return res.text
+        
+        # Implementación de reintento automático si falla por cuota
+        for i in range(3): # Intentar hasta 3 veces
+            try:
+                res = model.generate_content(prompt + "\n\nDATOS:\n" + datos_crudos)
+                return res.text
+            except Exception as e:
+                if "429" in str(e): # Si es error de cuota
+                    time.sleep(30) # Esperar 30 segundos y reintentar
+                    continue
+                else:
+                    raise e
+                    
     except Exception as e:
         return f"Error en IA: {str(e)}"
 
@@ -104,7 +114,7 @@ st.header("1. Prensa y TV (Scraping Masivo)")
 if api_key:
     genai.configure(api_key=api_key)
     if st.button("🚀 Iniciar Escaneo de Medios"):
-        with st.spinner("Procesando noticias nacionales..."):
+        with st.spinner("Procesando noticias nacionales... (esto puede tardar si la API está saturada)"):
             datos = buscar_noticias()
             if datos:
                 st.text_area("RESULTADOS:", value=procesar_ia(datos), height=600)
@@ -115,7 +125,7 @@ else:
 
 st.divider()
 
-# SECCIÓN 2: REDES SOCIALES (NACIONAL)
+# SECCIÓN 2: REDES SOCIALES
 redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
 col_24h, col_1h = st.columns(2)
 
