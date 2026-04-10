@@ -76,7 +76,7 @@ with st.sidebar:
 
 if st.button("🚀 Iniciar Escaneo"):
     if not api_key or not rss_url:
-        st.error("Por favor ingresa la API Key y la URL del Feed RSS.")
+        st.error("Por favor ingresa la API Key (AIzaSyCgkJXW9znhE-TLiHCOxIW0Kv_ruqrFK_E) y la URL del Feed RSS. (https://www.google.com.bo/alerts/feeds/09233459801766163520/10520035271565045257)")
     else:
         with st.spinner("Procesando alertas de Google..."):
             noticias = buscar_noticias_alerts(rss_url)
