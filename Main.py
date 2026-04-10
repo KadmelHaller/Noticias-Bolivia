@@ -12,6 +12,7 @@ st.set_page_config(page_title="Monitor Nacional Bolivia", layout="wide")
 zona_horaria = pytz.timezone('America/La_Paz')
 fecha_hoy_str = datetime.now(zona_horaria).strftime('%d/%m/%Y')
 
+# FILTRO DE EXCLUSIÓN (Omite deportes, farándula, espectáculo e internacional)
 BLACKLIST = [
     "fútbol", "deporte", "partido", "gol", "atletismo", "fifa", "conmebol", "copa", "liga", "tenis",
     "farándula", "espectáculo", "show", "concierto", "cine", "actor", "actriz", "música", "estreno",
@@ -48,7 +49,7 @@ def buscar_noticias_fast():
 
     for f in fuentes:
         try:
-            r = requests.get(f['u'], headers=headers, timeout=5) # Timeout más corto
+            r = requests.get(f['u'], headers=headers, timeout=5)
             r.encoding = 'utf-8'
             soup = BeautifulSoup(r.text, 'html.parser')
 
@@ -57,7 +58,6 @@ def buscar_noticias_fast():
                 link = tag.get('href', '') if tag.name == 'a' else (tag.find('a').get('href', '') if tag.find('a') else '')
                 t_low = texto.lower()
                 
-                # Filtro: Texto largo, no repetido y no en lista negra
                 if len(texto) > 40 and t_low not in vistos_texto:
                     if not any(b in t_low for b in BLACKLIST):
                         full_link = link if link.startswith('http') else f['u'].rstrip('/') + "/" + link.lstrip('/')
@@ -65,72 +65,62 @@ def buscar_noticias_fast():
                         vistos_texto.add(t_low)
         except: continue
     
-    # IMPORTANTE: Retornamos solo las primeras 40 para que no sea infinito
     return hallazgos[:40]
 
-# --- 3. PROCESAMIENTO IA ---
+# --- 3. ANALISTA IA ---
 def procesar_ia_safe(datos, api_key):
     genai.configure(api_key=api_key)
-    # Autodetectar modelo
-    modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-    modelo_id = next((m for m in modelos if "flash" in m), modelos[0])
+    modelos_visibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    modelo_id = next((m for m in modelos_visibles if "flash" in m), modelos_visibles[0])
     model = genai.GenerativeModel(modelo_id)
     
     reporte = ""
-    barra = st.progress(0)
-    
-    # Procesar en lotes de 5 para ir rápido pero seguro
     for i in range(0, len(datos), 5):
         bloque = "\n".join(datos[i:i+5])
         prompt = f"RESUMEN NACIONAL BOLIVIA {fecha_hoy_str}. No deportes/farandula/internacional. FORMATO: *TITULAR*, MEDIO, RESUMEN 4-6 LÍNEAS, URL."
-        
         try:
             res = model.generate_content(prompt + "\n\nDATOS:\n" + bloque)
             reporte += res.text + "\n\n---\n\n"
-            time.sleep(2) # Pausa mínima
+            time.sleep(2)
         except:
             time.sleep(5)
             continue
-        
-        barra.progress((i + 5) / len(datos) if (i + 5) < len(datos) else 1.0)
-            
     return reporte
 
 # --- 4. INTERFAZ ---
 st.title(f"Monitor Nacional Bolivia: {fecha_hoy_str}")
 
 with st.sidebar:
-    api_key = st.text_input("Gemini API Key:", type="password")
-    max_notas = st.slider("Cantidad de notas a procesar:", 10, 50, 25)
+    api_key = st.sidebar.text_input("API Key Gemini:", type="password")
 
-if st.button("🚀 Iniciar Escaneo Rápido"):
+if st.button("🚀 Iniciar Escaneo Nacional"):
     if not api_key:
-        st.error("Falta API Key")
+        st.error("Ingresa tu API Key en la izquierda.")
     else:
-        with st.spinner("Rastreando medios (esto será rápido)..."):
-            # 1. Scraping
-            todas = buscar_noticias_fast()
-            seleccion = todas[:max_notas]
-            
+        with st.spinner("Procesando noticias nacionales..."):
+            seleccion = buscar_noticias_fast()
             if seleccion:
-                st.success(f"Capturadas {len(todas)} noticias. Procesando las {len(seleccion)} mejores para evitar bloqueo.")
-                
-                # 2. Procesamiento IA
                 resultado = procesar_ia_safe(seleccion, api_key)
-                
-                # 3. Mostrar Resultado
-                st.subheader("Reporte Final")
-                st.text_area("Copia el reporte aquí:", value=resultado, height=600)
+                st.text_area("RESULTADOS:", value=resultado, height=600)
             else:
-                st.warning("No se hallaron noticias que pasen el filtro.")
+                st.warning("No se hallaron noticias relevantes.")
 
 st.divider()
 
-# BLOQUE DE REDES
-st.header("Búsqueda en Redes")
-redes = ["Facebook", "X", "TikTok", "Instagram"]
-cols = st.columns(4)
-for idx, r in enumerate(redes):
-    with cols[idx]:
-        q = urllib.parse.quote(f'site:{r.lower()}.com "Bolivia" -deportes -fútbol')
-        st.markdown(f"🔗 [Ver {r}](https://www.google.com/search?q={q}&tbs=qdr:d)")
+# --- 5. REDES SOCIALES (FORMATO ORIGINAL RESTABLECIDO) ---
+redes = ["Facebook", "X", "TikTok", "Instagram", "Threads"]
+col_24h, col_1h = st.columns(2)
+
+with col_24h:
+    st.header("2. Redes Sociales (24h)")
+    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r} (24h)](https://www.google.com/search?q={q}&tbs=qdr:d)")
+
+with col_1h:
+    st.header("3. Redes Sociales (1h)")
+    st.caption("Búsqueda nacional: IMPUESTOS BOLIVIA")
+    for r in redes:
+        q = urllib.parse.quote(f'site:{r.lower()}.com "impuestos" "Bolivia"')
+        st.markdown(f"🔗 [Ver en {r} (1h)](https://www.google.com/search?q={q}&tbs=qdr:h)")
